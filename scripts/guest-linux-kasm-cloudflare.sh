@@ -18,7 +18,7 @@ if [[ -z "$WEBTOP_PASS" ]]; then
   read -rsp "Set a strong password for Webtop user '${WEBTOP_USER}': " WEBTOP_PASS
   echo ""
   if [[ ${#WEBTOP_PASS} -lt 8 ]]; then
-    echo "Error: Password kam se kam 8 characters ka hona chahiye."
+    echo "Error: Password must be at least 8 characters long."
     exit 1
   fi
 fi
@@ -75,10 +75,10 @@ if [[ -n "$CF_TUNNEL_TOKEN" ]]; then
   sudo systemctl enable --now cloudflared
   echo "[+] Cloudflared tunnel service active!"
 else
-  echo "[4/4] Skipping cloudflared install (CF_TUNNEL_TOKEN pass nahi kiya gaya)."
-  echo "      Cloudflare Dashboard -> Tunnels me jaakar Debian service command run karein,"
-  echo "      aur Public Hostname ko 'http://localhost:3000' par point karein."
+  echo "[4/4] Skipping cloudflared install (CF_TUNNEL_TOKEN was not provided)."
+  echo "      Open Cloudflare Dashboard -> Tunnels, run the Debian service command,"
+  echo "      and point the Public Hostname to 'http://localhost:3000'."
 fi
 
 echo ""
-echo "✅ Setup Complete! Container 'remote-webtop' har boot par auto-start hoga."
+echo "Setup complete. Container 'remote-webtop' will start automatically on every boot."

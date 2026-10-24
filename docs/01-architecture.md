@@ -1,65 +1,39 @@
-# 01 — System Architecture & How It Works
+# 01 — Architecture: Zero-D1 WebRTC P2P & Optional Hyper-V VM
 
-Yeh document explain karta hai ki **1 km (ya kisi bhi distance) door rakhe Wi-Fi laptop** par bina router chhede aur bina host desktop disturb kiye browser-based VM kaise kaam karta hai.
-
----
-
-## 1. Windows 11 Pro ka Sabse Bada Plus Point: Native Hyper-V
-
-Aapke dost ke laptop me **Windows 11 Pro** hai — yeh sabse bada advantage hai kyunki isme **Microsoft Hyper-V** pehle se built-in aata hai (free, official Microsoft feature).
-
-### VirtualBox / VMware Workstation vs Hyper-V:
-| Feature | VirtualBox / VMware Player | **Microsoft Hyper-V (Win 11 Pro)** |
-| :--- | :--- | :--- |
-| **Type** | Type-2 (App ki tarah chalta hai) | **Type-1 Bare-Metal Hypervisor** |
-| **Auto-Start on Boot** | Mushkil (User login aur taskbar window chahiye) | **Native Windows Service (`vmms`) — Boot hote hi start!** |
-| **Headless Mode** | Aksar taskbar me icon/window aati hai | **100% Headless Service (Zero UI windows on desktop)** |
-| **Dynamic Memory** | Fixed RAM block kar leta hai | **Dynamic RAM (Jitni zaroorat utni hi RAM use karega)** |
-| **Auto Save on Shutdown**| VM crash ho sakta hai agar PC band ho | **Graceful State Save — Wahin se resume hoga!** |
+This document explains how **Gothwad Remote Desktop (`remotedesktop.gothwadtech.com`)** connects to a remote Windows 11 laptop over Wi-Fi or mobile hotspot without router port forwarding, without a Cloudflare D1 database, and with optional background VM isolation.
 
 ---
 
-## 2. Wi-Fi + CGNAT Problem aur Uska Solution
+## 1. Primary Mode vs Secondary Background VM Mode
 
-Jab dost ka laptop ghar ke Wi-Fi ya mobile hotspot se connect hota hai, toh 2 challenges aate hain:
-1. **CGNAT / Dynamic IP:** India me JioFiber, Airtel, aur mobile networks par aapko public IP nahi milti, isliye router me **Port Forwarding kaam nahi karti**.
-2. **Wi-Fi Bridging Issue:** Laptop ke Wi-Fi card par Hyper-V ka "External Switch" (Bridge) banane se dost ka Wi-Fi bar-bar disconnect ho sakta hai.
-
-### Solution: `Default Switch` (WinNAT) + Outbound Tunnel Inside VM
-1. **Hyper-V `Default Switch`:** Windows 11 Hyper-V me ek built-in virtual switch hota hai jiska naam hai **`Default Switch`**. Dost chahe Ghar ka Wi-Fi lagaye, Hostel Wi-Fi lagaye, ya Phone Hotspot — Windows automatic apne internet ko NAT ke through VM ke andar bhej deta hai!
-2. **Outbound Connection:** VM ke andar chalne wala agent (`chromoting` / `cloudflared` / `tailscaled`) andar se bahar (`Outbound Port 443 HTTPS/WebRTC`) connect karta hai. Isliye:
-   - Router login ki zaroorat **NAHI** hai.
-   - Static IP ki zaroorat **NAHI** hai.
-   - Host Windows Firewall me inbound ports kholne ki zaroorat **NAHI** hai.
+1. **Primary Mode — Main Windows 11 Desktop (`host_os`):**
+   - Works just like Google Chrome Remote Desktop.
+   - Streams the Windows 11 desktop over WebRTC DataChannels and forwards mouse, trackpad, keyboard, and clipboard input.
+   - Displays a visible `"Your desktop is shared with <user>@gothwadtech.com [Stop Sharing]"` banner on the host monitor whenever a session is active.
+2. **Secondary Optional Mode — Isolated Hyper-V Background VM (`hyperv_vm`):**
+   - Windows 11 Pro includes Microsoft's Type-1 **Hyper-V** hypervisor (`vmms` service).
+   - If enabled, an isolated Linux or Windows guest VM runs headlessly in the background (capped at **4 GB dynamic RAM** and **60% CPU**) so remote work never disturbs the person using the physical laptop.
 
 ---
 
-## 3. Boot-to-Browser Lifecycle (Jab Dost Laptop On Karega Toh Kya Hoga?)
+## 2. Solving Wi-Fi & CGNAT Without Router Access
+
+Residential fiber and mobile hotspots place laptops behind **CGNAT** (no public IPv4 address for port forwarding). In addition, bridging a laptop Wi-Fi adapter directly in Hyper-V frequently drops wireless connections.
+
+Our architecture solves both problems cleanly:
+1. **Outbound WebRTC + TURN Relay:** The Windows host agent (`gothwad_agent.py`) opens an outbound WebSocket to PeerJS signaling and establishes peer-to-peer WebRTC connections via Google STUN and OpenRelay TURN over port `443` — zero router configuration or inbound firewall rules required.
+2. **Hyper-V `Default Switch` (NAT):** For the optional Background VM, Hyper-V's built-in `Default Switch` automatically NATs traffic over whichever Wi-Fi network or phone hotspot the Windows host joins.
+
+---
+
+## 3. Boot-to-Browser Lifecycle
 
 ```text
-[00:00 sec] Dost ne Laptop ka Power Button dabaya
-     |
-[00:12 sec] Windows 11 Pro Boot hua -> Dost apna kaam shuru kar sakta hai
-     |      (30-second Auto-Start Delay rakha hai taaki boot time pe SSD slow na ho)
-     |
-[00:42 sec] Hyper-V Service (`vmms`) background me Guest VM ko Resume/Boot karti hai
-     |      (Dost ke desktop par koi window nahi aati)
-     |
-[00:55 sec] Dost ka Laptop Wi-Fi se connect hota hai -> `Default Switch` VM ko internet deta hai
-     |
-[01:05 sec] Guest VM ke andar ka Tunnel Service (CRD / Cloudflared / Tailscale)
-     |      auto-start hota hai aur Cloud Relay se jud jaata hai
-     |
-[01:10 sec] AAP APNE GHAR PE BROWSER KHOLTE HO -> VM "ONLINE" DIKHTA HAI -> CLICK & USE!
+[00:00s] Windows 11 laptop powers on
+[00:15s] Scheduled Task starts GothwadRemoteAgent.exe in the background
+[00:20s] Host connects to Wi-Fi and registers on P2P slot grd-<username>-slot-1
+[00:30s] (Optional) Hyper-V service resumes RemoteWorkVM after a 30s SSD-friendly delay
+[00:35s] Open remotedesktop.gothwadtech.com on phone or desktop -> Click Connect -> Enter 6-digit PIN
 ```
 
-Aur jab dost apna laptop **Shut Down** karega:
-- Hyper-V automatically VM ki current state (khule huye apps ke saath!) disk par **Save** kar dega (`AutomaticStopAction = Save`).
-- Agli baar laptop on hone par VM wahin se wapas chalu ho jayega!
-
----
-
-## 4. Security & Isolation Guarantee
-
-- **Host -> Guest Isolation:** Aap VM ke andar kuch bhi install karo, browser chalao, code compile karo — woh sab ek single `.vhdx` virtual hard disk file ke andar band rehta hai. Dost ke `C:\Users\...` personal folders VM ko bilkul accessible nahi hote (jab tak koi manually share na kare).
-- **Encrypted Traffic:** Browser se VM tak sara display/keyboard stream **TLS 1.3 / WebRTC DTLS-SRTP** encrypted hota hai.
+When the Windows laptop shuts down cleanly, Hyper-V automatically saves any running VM state (`AutomaticStopAction = Save`) and resumes it on the next boot.

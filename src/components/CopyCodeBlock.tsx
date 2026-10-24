@@ -1,38 +1,50 @@
 import { useState } from 'react';
-import { Check, Copy, Terminal } from 'lucide-react';
+import { Check, Copy } from 'lucide-react';
 
 interface CopyCodeBlockProps {
-  label: string;
-  command: string;
+  title: string;
+  language?: string;
+  code: string;
 }
 
-export function CopyCodeBlock({ label, command }: CopyCodeBlockProps) {
+export function CopyCodeBlock({ title, language = 'powershell', code }: CopyCodeBlockProps) {
   const [copied, setCopied] = useState(false);
 
   const handleCopy = async () => {
-    await navigator.clipboard.writeText(command);
+    await navigator.clipboard.writeText(code);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
 
   return (
-    <div className="mt-2.5 rounded-xl border border-slate-800 bg-slate-950/90 overflow-hidden">
-      <div className="flex items-center justify-between border-b border-slate-800/80 bg-slate-900/70 px-3 py-1.5 text-xs">
-        <span className="inline-flex items-center gap-1.5 font-medium text-slate-300">
-          <Terminal className="h-3.5 w-3.5 text-indigo-400" />
-          {label}
-        </span>
+    <div className="overflow-hidden rounded-xl border border-neutral-200 bg-neutral-50 dark:border-neutral-800 dark:bg-[#191919]">
+      <div className="flex items-center justify-between border-b border-neutral-200 px-3.5 py-2 dark:border-neutral-800">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-medium text-neutral-700 dark:text-neutral-300">{title}</span>
+          <span className="rounded bg-neutral-200/70 px-1.5 py-0.5 font-mono text-[10px] text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400">
+            {language}
+          </span>
+        </div>
         <button
           type="button"
           onClick={() => void handleCopy()}
-          className="inline-flex items-center gap-1 rounded-md bg-indigo-600/20 border border-indigo-500/30 px-2 py-0.5 text-[11px] font-semibold text-indigo-300 transition hover:bg-indigo-600/30 hover:text-white"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-200 bg-white px-2.5 py-1 text-xs font-medium text-neutral-700 transition hover:bg-neutral-100 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-200 dark:hover:bg-neutral-700"
         >
-          {copied ? <Check className="h-3 w-3 text-emerald-400" /> : <Copy className="h-3 w-3" />}
-          {copied ? 'Copied!' : 'Copy Command'}
+          {copied ? (
+            <>
+              <Check className="h-3.5 w-3.5 text-emerald-500" />
+              Copied
+            </>
+          ) : (
+            <>
+              <Copy className="h-3.5 w-3.5" />
+              Copy
+            </>
+          )}
         </button>
       </div>
-      <pre className="overflow-x-auto p-3 font-mono text-xs leading-relaxed text-emerald-300">
-        {command}
+      <pre className="overflow-x-auto p-3.5 font-mono text-xs leading-relaxed text-neutral-800 dark:text-neutral-200">
+        <code>{code}</code>
       </pre>
     </div>
   );

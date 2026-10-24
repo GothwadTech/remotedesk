@@ -2,6 +2,7 @@ import type { AccountItem, SessionPayload } from '../types';
 import { sanitizeGothwadUsername } from './protocol';
 
 export const APP_DOMAIN = 'gothwadtech.com';
+export const ECOSYSTEM_NAME = 'Gothwad';
 export const ACCOUNTS_API_ORIGIN = 'https://api.gothwadtech.com';
 export const ACCOUNTS_WEB_ORIGIN = 'https://accounts.gothwadtech.com';
 
@@ -16,6 +17,21 @@ export class AuthRequiredError extends Error {
 export function isProductionGothwadHost(hostname = window.location.hostname): boolean {
   const h = hostname.toLowerCase();
   return h === APP_DOMAIN || h.endsWith(`.${APP_DOMAIN}`);
+}
+
+export function widgetScriptUrl(): string {
+  return `${ACCOUNTS_WEB_ORIGIN}/widget/account-menu.js`;
+}
+
+export function manageAccountUrl(authuser = 0): string {
+  return `${ACCOUNTS_WEB_ORIGIN}/u/${authuser}/me`;
+}
+
+export function addAccountUrl(nextUrl?: string): string {
+  const u = new URL(`${ACCOUNTS_WEB_ORIGIN}/signin`);
+  u.searchParams.set('add', '1');
+  u.searchParams.set('next', nextUrl || window.location.href);
+  return u.toString();
 }
 
 export function buildGothwadSignInUrl(authuser = 0): string {
@@ -39,9 +55,9 @@ function buildPreviewSession(authuser: number): SessionPayload {
     {
       index: 1,
       id: 'b',
-      username: 'dost',
-      email: `dost@${APP_DOMAIN}`,
-      name: 'Dost (VM-Only Shared Guest)',
+      username: 'alex',
+      email: `alex@${APP_DOMAIN}`,
+      name: 'Alex Sharma',
       avatarUrl: null,
       active: authuser === 1,
     },
@@ -58,7 +74,7 @@ function buildPreviewSession(authuser: number): SessionPayload {
     authuser: chosen.index,
     activeId: chosen.id,
     accounts: demoAccounts,
-    accountUrl: `${ACCOUNTS_WEB_ORIGIN}/u/${chosen.index}/me`,
+    accountUrl: manageAccountUrl(chosen.index),
     source: 'dev',
   };
 }
@@ -80,7 +96,7 @@ export async function resolveGothwadSession(authuser: number): Promise<SessionPa
       },
     });
   } catch {
-    throw new Error('Could not reach Gothwad Accounts (api.gothwadtech.com). Please retry.');
+    throw new Error('Could not reach Gothwad Accounts. Please check your connection and retry.');
   }
 
   if (res.status === 401 || res.status === 403) {
@@ -130,7 +146,37 @@ export async function resolveGothwadSession(authuser: number): Promise<SessionPa
     authuser,
     activeId: typeof data.activeId === 'string' ? data.activeId : null,
     accounts,
-    accountUrl: `${ACCOUNTS_WEB_ORIGIN}/u/${authuser}/me`,
+    accountUrl: manageAccountUrl(authuser),
     source: 'cookie',
   };
+}
+
+export async function switchAccountOnServer(slotId: string): Promise<void> {
+  if (!isProductionGothwadHost()) return;
+  await fetch(`${ACCOUNTS_API_ORIGIN}/api/auth/switch`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id: slotId }),
+  }).catch(() => undefined);
+}
+
+export async function signOutAccountSlotOnServer(slotId: string): Promise<void> {
+  if (!isProductionGothwadHost()) return;
+  await fetch(`${ACCOUNTS_API_ORIGIN}/api/auth/accounts/${encodeURIComponent(slotId)}/signout`, {
+    method: 'POST',
+    credentials: 'include',
+  }).catch(() => undefined);
+}
+
+export async function signOutAllOnServer(): Promise<void> {
+  if (!isProductionGothwadHost()) {
+    window.location.href = buildGothwadSignInUrl(0);
+    return;
+  }
+  await fetch(`${ACCOUNTS_API_ORIGIN}/api/auth/signout`, {
+    method: 'POST',
+    credentials: 'include',
+  }).catch(() => undefined);
+  window.location.href = buildGothwadSignInUrl(0);
 }

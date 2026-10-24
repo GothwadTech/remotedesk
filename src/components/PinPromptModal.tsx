@@ -1,105 +1,141 @@
-import { useState, type FormEvent } from 'react';
-import { KeyRound, Laptop, Server, X } from 'lucide-react';
+import { useState } from 'react';
+import { HardDrive, Lock, Monitor, X } from 'lucide-react';
 import type { RemoteDevice, TargetMode } from '../types';
 
 interface PinPromptModalProps {
-  device: RemoteDevice;
+  device: RemoteDevice | null;
   targetMode: TargetMode;
-  error: string | null;
   connecting: boolean;
-  onSubmit: (pin: string) => void;
+  error: string | null;
+  onChangeMode: (mode: TargetMode) => void;
   onClose: () => void;
+  onConfirm: (pin: string) => void;
 }
 
 export function PinPromptModal({
   device,
   targetMode,
-  error,
   connecting,
-  onSubmit,
+  error,
+  onChangeMode,
   onClose,
+  onConfirm,
 }: PinPromptModalProps) {
-  const [pin, setPin] = useState(device.id === 'dev_demo_win11' ? '123456' : '');
+  const [pin, setPin] = useState(device?.isDemo ? '123456' : '');
 
-  const handleSubmit = (e: FormEvent) => {
-    e.preventDefault();
-    if (pin.trim()) onSubmit(pin.trim());
-  };
+  if (!device) return null;
+
+  const canSwitchMode = device.canControlHostOs && device.canControlVm;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm">
-      <form
-        onSubmit={handleSubmit}
-        className="w-full max-w-md rounded-2xl border border-slate-800 bg-slate-900 p-6 shadow-2xl"
-      >
-        <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-          <div className="flex items-center gap-2">
-            {targetMode === 'host_os' ? (
-              <Laptop className="h-5 w-5 text-sky-400" />
-            ) : (
-              <Server className="h-5 w-5 text-indigo-400" />
-            )}
-            <h3 className="text-base font-bold text-white">
-              {targetMode === 'host_os'
-                ? 'Connect to Main Windows 11 OS'
-                : `Connect to Hyper-V VM (${device.vmName})`}
-            </h3>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-[2px]">
+      <div className="w-full max-w-sm rounded-2xl border border-neutral-200 bg-white p-5 shadow-xl dark:border-neutral-800 dark:bg-[#262626]">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#0494f4]/10 text-[#0494f4]">
+              <Lock className="h-4 w-4" />
+            </div>
+            <div>
+              <h3 className="text-base font-medium text-neutral-900 dark:text-neutral-100">
+                Enter PIN
+              </h3>
+              <p className="text-xs text-neutral-500 dark:text-neutral-400">{device.name}</p>
+            </div>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg p-1 text-slate-400 hover:bg-slate-800 hover:text-white"
+            aria-label="Close"
+            className="rounded-full p-1.5 text-neutral-400 transition hover:bg-neutral-100 hover:text-neutral-700 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
           >
-            <X className="h-5 w-5" />
+            <X className="h-4 w-4" />
           </button>
         </div>
 
-        <p className="mt-3 text-xs text-slate-400">
-          {targetMode === 'host_os'
-            ? 'Direct Host OS mode: Host screen par Chrome Remote Desktop jaisa "Shared with your Gothwad Account" banner dikhega.'
-            : 'Headless Background VM mode: Dost ka desktop/mouse bilkul untouched rahega; aap seedha isolated Hyper-V VM me connect hoge.'}
-        </p>
+        {canSwitchMode && (
+          <div className="mt-4 grid grid-cols-2 gap-1.5 rounded-xl bg-neutral-100 p-1 dark:bg-[#1b1b1b]">
+            <button
+              type="button"
+              onClick={() => onChangeMode('host_os')}
+              className={`flex items-center justify-center gap-1.5 rounded-lg py-1.5 text-xs font-medium transition ${
+                targetMode === 'host_os'
+                  ? 'bg-white text-neutral-900 shadow-xs dark:bg-[#2d2d2d] dark:text-white'
+                  : 'text-neutral-600 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-200'
+              }`}
+            >
+              <Monitor className="h-3.5 w-3.5" />
+              Main Desktop
+            </button>
+            <button
+              type="button"
+              onClick={() => onChangeMode('hyperv_vm')}
+              className={`flex items-center justify-center gap-1.5 rounded-lg py-1.5 text-xs font-medium transition ${
+                targetMode === 'hyperv_vm'
+                  ? 'bg-white text-neutral-900 shadow-xs dark:bg-[#2d2d2d] dark:text-white'
+                  : 'text-neutral-600 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-200'
+              }`}
+            >
+              <HardDrive className="h-3.5 w-3.5" />
+              Background VM
+            </button>
+          </div>
+        )}
 
-        <div className="mt-4">
-          <label className="flex items-center justify-between text-xs font-medium text-slate-300">
-            <span className="inline-flex items-center gap-1">
-              <KeyRound className="h-3.5 w-3.5 text-indigo-400" />
-              Enter 6-Digit Remote PIN
-            </span>
-            {device.id === 'dev_demo_win11' && (
-              <span className="text-[11px] text-indigo-300">Demo PIN: 123456</span>
-            )}
-          </label>
-          <input
-            type="password"
-            inputMode="numeric"
-            autoFocus
-            value={pin}
-            onChange={(e) => setPin(e.target.value)}
-            placeholder="••••••"
-            className="mt-1.5 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2.5 text-center font-mono text-lg tracking-[0.4em] text-white focus:border-indigo-500 focus:outline-none"
-          />
-        </div>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            onConfirm(pin);
+          }}
+          className="mt-4 space-y-4"
+        >
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-neutral-600 dark:text-neutral-300">
+              6-digit PIN {device.isDemo ? '(Demo: 123456)' : ''}
+            </label>
+            <input
+              type="password"
+              inputMode="numeric"
+              autoFocus
+              required
+              minLength={6}
+              maxLength={12}
+              value={pin}
+              onChange={(e) => setPin(e.target.value)}
+              placeholder="••••••"
+              className="w-full rounded-xl border border-neutral-300 bg-white px-4 py-2.5 text-center font-mono text-lg tracking-[0.35em] text-neutral-900 focus:border-[#0494f4] focus:outline-hidden dark:border-neutral-700 dark:bg-[#1b1b1b] dark:text-white"
+            />
+          </div>
 
-        {error && <p className="mt-2 text-xs text-rose-400">{error}</p>}
+          {targetMode === 'host_os' && (
+            <p className="text-[11px] leading-relaxed text-neutral-500 dark:text-neutral-400">
+              A visible banner will appear on the remote Windows screen while you are connected.
+            </p>
+          )}
 
-        <div className="mt-5 flex justify-end gap-2">
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg border border-slate-700 px-4 py-2 text-xs font-medium text-slate-300 hover:bg-slate-800"
-          >
-            Cancel
-          </button>
-          <button
-            type="submit"
-            disabled={connecting || pin.length < 6}
-            className="rounded-lg bg-indigo-600 px-4 py-2 text-xs font-semibold text-white transition hover:bg-indigo-500 disabled:opacity-40"
-          >
-            {connecting ? 'Verifying Gothwad Session + PIN...' : 'Start Encrypted Session'}
-          </button>
-        </div>
-      </form>
+          {error && (
+            <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300">
+              {error}
+            </div>
+          )}
+
+          <div className="flex justify-end gap-2 pt-1">
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-full px-4 py-2 text-xs font-medium text-neutral-600 transition hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={connecting || pin.trim().length < 6}
+              className="rounded-full bg-[#0494f4] px-5 py-2 text-xs font-medium text-white transition hover:bg-[#0382d6] disabled:opacity-50"
+            >
+              {connecting ? 'Connecting...' : 'Connect'}
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 }

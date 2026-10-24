@@ -1,12 +1,11 @@
+import { useEffect, useRef, useState } from 'react';
 import {
-  Cpu,
   HardDrive,
-  Laptop,
-  Lock,
+  Monitor,
+  MoreVertical,
+  Pause,
   Play,
   RotateCcw,
-  Save,
-  Server,
   Share2,
   Trash2,
 } from 'lucide-react';
@@ -17,8 +16,8 @@ interface DeviceCardProps {
   busyAction: string | null;
   onConnect: (device: RemoteDevice, mode: TargetMode) => void;
   onVmPower: (device: RemoteDevice, action: 'start_vm' | 'save_vm' | 'restart_vm') => void;
-  onOpenShares: (device: RemoteDevice) => void;
-  onUnlink: (device: RemoteDevice) => void;
+  onOpenShare: (device: RemoteDevice) => void;
+  onRemoveBookmark?: (device: RemoteDevice) => void;
 }
 
 export function DeviceCard({
@@ -26,212 +25,211 @@ export function DeviceCard({
   busyAction,
   onConnect,
   onVmPower,
-  onOpenShares,
-  onUnlink,
+  onOpenShare,
+  onRemoveBookmark,
 }: DeviceCardProps) {
-  const ramPct = Math.min(
-    100,
-    Math.round((device.hostRamUsedMb / Math.max(1024, device.hostRamTotalMb)) * 100),
-  );
-  const ramUsedGb = (device.hostRamUsedMb / 1024).toFixed(1);
-  const ramTotalGb = (device.hostRamTotalMb / 1024).toFixed(0);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const handleOutside = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleOutside);
+    return () => document.removeEventListener('mousedown', handleOutside);
+  }, [menuOpen]);
+
+  const primaryMode: TargetMode = device.canControlHostOs ? 'host_os' : 'hyperv_vm';
 
   return (
-    <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-5 shadow-xl transition hover:border-slate-700">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="flex items-start gap-3">
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-slate-700 bg-slate-800/80 text-indigo-400">
-            <Laptop className="h-5 w-5" />
-          </div>
-          <div>
-            <div className="flex flex-wrap items-center gap-2">
-              <h2 className="text-base font-bold text-white">{device.name}</h2>
-              <span
-                className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                  device.online
-                    ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
-                    : 'bg-slate-800 text-slate-400 border border-slate-700'
-                }`}
-              >
-                <span
-                  className={`h-1.5 w-1.5 rounded-full ${
-                    device.online ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'
-                  }`}
-                />
-                {device.online ? 'Online via Wi-Fi' : 'Offline'}
-              </span>
-              <span className="rounded-md bg-slate-800 px-2 py-0.5 text-[11px] font-medium text-slate-300">
-                {device.role === 'owner'
-                  ? `Owner: ${device.ownerUsername}`
-                  : `Shared (${device.accessScope === 'host_and_vm' ? 'Host + VM' : 'VM Only'})`}
-              </span>
-            </div>
-            <p className="mt-0.5 text-xs text-slate-400">{device.osInfo}</p>
-          </div>
-        </div>
-
-        {device.role === 'owner' && (
-          <div className="flex items-center gap-1.5">
-            <button
-              type="button"
-              onClick={() => onOpenShares(device)}
-              className="inline-flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-800/80 px-2.5 py-1.5 text-xs font-medium text-slate-200 transition hover:border-indigo-500/60 hover:text-white"
-            >
-              <Share2 className="h-3.5 w-3.5 text-indigo-400" />
-              Share Access
-            </button>
-            <button
-              type="button"
-              onClick={() => onUnlink(device)}
-              title="Unlink remote PC"
-              className="rounded-lg border border-slate-800 bg-slate-900 p-1.5 text-slate-400 transition hover:border-rose-500/50 hover:text-rose-400"
-            >
-              <Trash2 className="h-4 w-4" />
-            </button>
-          </div>
-        )}
-      </div>
-
-      {/* Host Telemetry Bar */}
-      <div className="mt-4 grid grid-cols-1 gap-2.5 rounded-xl border border-slate-800/90 bg-slate-950/60 p-3 sm:grid-cols-3">
-        <div className="flex items-center gap-2 text-xs text-slate-300">
-          <HardDrive className="h-4 w-4 text-indigo-400 shrink-0" />
-          <div className="w-full">
-            <div className="flex justify-between">
-              <span className="text-slate-400">Host RAM</span>
-              <span className="font-medium">
-                {ramUsedGb} / {ramTotalGb} GB ({ramPct}%)
-              </span>
-            </div>
-            <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-slate-800">
-              <div
-                className="h-full rounded-full bg-indigo-500 transition-all"
-                style={{ width: `${ramPct}%` }}
-              />
-            </div>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2 text-xs text-slate-300">
-          <Cpu className="h-4 w-4 text-violet-400 shrink-0" />
-          <div>
-            <span className="text-slate-400">Host CPU: </span>
-            <span className="font-semibold text-white">{device.hostCpuPercent}%</span>
-            <span className="ml-1 text-[11px] text-slate-500">(VM cap 60%)</span>
-          </div>
-        </div>
-
-        <div className="flex items-center justify-between gap-2 text-xs">
-          <span className="text-slate-400">Hyper-V `{device.vmName}`:</span>
+    <div className="group flex items-center justify-between gap-3 px-4 py-3.5 transition hover:bg-neutral-50 sm:px-5 sm:py-4 dark:hover:bg-white/[0.03]">
+      <button
+        type="button"
+        disabled={!device.online}
+        onClick={() => onConnect(device, primaryMode)}
+        className="flex min-w-0 flex-1 items-center gap-3.5 text-left disabled:cursor-not-allowed disabled:opacity-60"
+      >
+        <div className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-neutral-100 text-neutral-700 dark:bg-neutral-800 dark:text-neutral-200">
+          <Monitor className="h-5 w-5" />
           <span
-            className={`rounded-md px-2 py-0.5 font-semibold ${
-              device.vmState === 'Running'
-                ? 'bg-emerald-500/15 text-emerald-300'
-                : 'bg-amber-500/15 text-amber-300'
+            className={`absolute right-0 bottom-0 h-2.5 w-2.5 rounded-full ring-2 ring-white dark:ring-[#262626] ${
+              device.online ? 'bg-emerald-500' : 'bg-neutral-400'
             }`}
-          >
-            {device.vmState}
-          </span>
+          />
         </div>
-      </div>
 
-      {/* Dual-Mode Remote Launch Cards */}
-      <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
-        {/* Mode 1: Main Windows 11 Host OS */}
-        <div className="flex flex-col justify-between rounded-xl border border-slate-800 bg-slate-950/70 p-3.5">
-          <div>
-            <div className="flex items-center justify-between">
-              <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-white">
-                <Laptop className="h-4 w-4 text-sky-400" />
-                Mode 1: Main Windows 11 OS
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <span className="truncate text-sm font-medium text-neutral-900 sm:text-[15px] dark:text-neutral-100">
+              {device.name}
+            </span>
+            {device.isDemo && (
+              <span className="shrink-0 rounded-full bg-neutral-100 px-2 py-0.5 text-[11px] font-medium text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400">
+                Demo
               </span>
-              <span className="rounded bg-sky-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-sky-300">
-                Full System
-              </span>
-            </div>
-            <p className="mt-1 text-xs text-slate-400">
-              Chrome Remote Desktop jaisa direct Host screen, mouse &amp; files control (Host par
-              transparent sharing banner dikhega).
-            </p>
+            )}
           </div>
-
-          <div className="mt-3">
-            {device.canControlHostOs ? (
-              <button
-                type="button"
-                disabled={!device.online}
-                onClick={() => onConnect(device, 'host_os')}
-                className="w-full rounded-lg bg-sky-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-sky-500 disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                Control Main Windows OS
-              </button>
-            ) : (
-              <div className="flex items-center justify-center gap-1.5 rounded-lg border border-slate-800 bg-slate-900 px-3 py-2 text-xs text-slate-400">
-                <Lock className="h-3.5 w-3.5 text-amber-400" />
-                Restricted to Owner (`vm_only` share)
-              </div>
+          <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-neutral-500 dark:text-neutral-400">
+            <span className={device.online ? 'text-emerald-600 dark:text-emerald-400' : ''}>
+              {device.online ? 'Online' : 'Offline'}
+            </span>
+            <span>·</span>
+            <span className="truncate">{device.osInfo}</span>
+            {device.role === 'shared' && (
+              <>
+                <span>·</span>
+                <span>
+                  Shared by @{device.ownerUsername}
+                  {!device.canControlHostOs ? ' (VM only)' : ''}
+                </span>
+              </>
             )}
           </div>
         </div>
+      </button>
 
-        {/* Mode 2: Isolated Background Hyper-V VM */}
-        <div className="flex flex-col justify-between rounded-xl border border-indigo-500/30 bg-indigo-950/20 p-3.5">
-          <div>
-            <div className="flex items-center justify-between">
-              <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-white">
-                <Server className="h-4 w-4 text-indigo-400" />
-                Mode 2: Background Hyper-V VM
-              </span>
-              <span className="rounded bg-indigo-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-300">
-                Headless Isolated
-              </span>
+      <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
+        {device.canControlHostOs && device.canControlVm && (
+          <button
+            type="button"
+            disabled={!device.online}
+            onClick={() => onConnect(device, 'hyperv_vm')}
+            title={`Open Background VM (${device.vmState})`}
+            className="hidden items-center gap-1.5 rounded-full border border-neutral-200 px-3 py-1.5 text-xs font-medium text-neutral-700 transition hover:bg-neutral-100 disabled:opacity-40 sm:inline-flex dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800"
+          >
+            <HardDrive className="h-3.5 w-3.5 text-neutral-500 dark:text-neutral-400" />
+            VM
+          </button>
+        )}
+
+        <button
+          type="button"
+          disabled={!device.online}
+          onClick={() => onConnect(device, primaryMode)}
+          className="rounded-full bg-[#0494f4] px-3.5 py-1.5 text-xs font-medium text-white transition hover:bg-[#0382d6] disabled:opacity-40 sm:px-4"
+        >
+          {primaryMode === 'host_os' ? 'Connect' : 'Open VM'}
+        </button>
+
+        <div className="relative" ref={menuRef}>
+          <button
+            type="button"
+            onClick={() => setMenuOpen((v) => !v)}
+            aria-label="More options"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-full text-neutral-500 transition hover:bg-neutral-100 hover:text-neutral-800 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
+          >
+            <MoreVertical className="h-4 w-4" />
+          </button>
+
+          {menuOpen && (
+            <div className="absolute right-0 z-40 mt-1.5 w-56 overflow-hidden rounded-xl border border-neutral-200 bg-white py-1 shadow-lg dark:border-neutral-800 dark:bg-[#2a2a2a]">
+              {device.canControlHostOs && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    onConnect(device, 'host_os');
+                  }}
+                  className="flex w-full items-center gap-2.5 px-3.5 py-2 text-left text-xs text-neutral-800 transition hover:bg-neutral-100 dark:text-neutral-200 dark:hover:bg-white/5"
+                >
+                  <Monitor className="h-3.5 w-3.5 text-neutral-500" />
+                  Connect to Main Desktop
+                </button>
+              )}
+
+              {device.canControlVm && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    onConnect(device, 'hyperv_vm');
+                  }}
+                  className="flex w-full items-center gap-2.5 px-3.5 py-2 text-left text-xs text-neutral-800 transition hover:bg-neutral-100 dark:text-neutral-200 dark:hover:bg-white/5"
+                >
+                  <HardDrive className="h-3.5 w-3.5 text-neutral-500" />
+                  Open Background VM ({device.vmState})
+                </button>
+              )}
+
+              <div className="my-1 border-t border-neutral-100 dark:border-neutral-800" />
+
+              <button
+                type="button"
+                disabled={busyAction !== null}
+                onClick={() => {
+                  setMenuOpen(false);
+                  onVmPower(device, 'start_vm');
+                }}
+                className="flex w-full items-center gap-2.5 px-3.5 py-2 text-left text-xs text-neutral-700 transition hover:bg-neutral-100 disabled:opacity-50 dark:text-neutral-300 dark:hover:bg-white/5"
+              >
+                <Play className="h-3.5 w-3.5 text-emerald-500" />
+                Start Background VM
+              </button>
+
+              <button
+                type="button"
+                disabled={busyAction !== null}
+                onClick={() => {
+                  setMenuOpen(false);
+                  onVmPower(device, 'save_vm');
+                }}
+                className="flex w-full items-center gap-2.5 px-3.5 py-2 text-left text-xs text-neutral-700 transition hover:bg-neutral-100 disabled:opacity-50 dark:text-neutral-300 dark:hover:bg-white/5"
+              >
+                <Pause className="h-3.5 w-3.5 text-amber-500" />
+                Save VM state
+              </button>
+
+              <button
+                type="button"
+                disabled={busyAction !== null}
+                onClick={() => {
+                  setMenuOpen(false);
+                  onVmPower(device, 'restart_vm');
+                }}
+                className="flex w-full items-center gap-2.5 px-3.5 py-2 text-left text-xs text-neutral-700 transition hover:bg-neutral-100 disabled:opacity-50 dark:text-neutral-300 dark:hover:bg-white/5"
+              >
+                <RotateCcw className="h-3.5 w-3.5 text-neutral-500" />
+                Restart VM
+              </button>
+
+              {device.role === 'owner' && (
+                <>
+                  <div className="my-1 border-t border-neutral-100 dark:border-neutral-800" />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMenuOpen(false);
+                      onOpenShare(device);
+                    }}
+                    className="flex w-full items-center gap-2.5 px-3.5 py-2 text-left text-xs text-neutral-800 transition hover:bg-neutral-100 dark:text-neutral-200 dark:hover:bg-white/5"
+                  >
+                    <Share2 className="h-3.5 w-3.5 text-neutral-500" />
+                    Share access...
+                  </button>
+                </>
+              )}
+
+              {device.role === 'shared' && !device.isDemo && onRemoveBookmark && (
+                <>
+                  <div className="my-1 border-t border-neutral-100 dark:border-neutral-800" />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMenuOpen(false);
+                      onRemoveBookmark(device);
+                    }}
+                    className="flex w-full items-center gap-2.5 px-3.5 py-2 text-left text-xs text-red-600 transition hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-500/10"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    Remove computer
+                  </button>
+                </>
+              )}
             </div>
-            <p className="mt-1 text-xs text-slate-400">
-              Dost ki screen/mouse bilkul disturb nahi hogi. 100% isolated background VM (`Max 4GB`
-              RAM, auto-boot).
-            </p>
-          </div>
-
-          <div className="mt-3 flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              disabled={!device.online}
-              onClick={() => onConnect(device, 'hyperv_vm')}
-              className="flex-1 rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              Control Background VM
-            </button>
-
-            <div className="flex items-center gap-1">
-              <button
-                type="button"
-                disabled={busyAction !== null}
-                onClick={() => onVmPower(device, 'start_vm')}
-                title="Start / Resume Hyper-V VM"
-                className="rounded-lg border border-slate-700 bg-slate-800 p-2 text-emerald-400 hover:border-emerald-500/50"
-              >
-                <Play className="h-3.5 w-3.5" />
-              </button>
-              <button
-                type="button"
-                disabled={busyAction !== null}
-                onClick={() => onVmPower(device, 'save_vm')}
-                title="Save Hyper-V VM State"
-                className="rounded-lg border border-slate-700 bg-slate-800 p-2 text-amber-300 hover:border-amber-500/50"
-              >
-                <Save className="h-3.5 w-3.5" />
-              </button>
-              <button
-                type="button"
-                disabled={busyAction !== null}
-                onClick={() => onVmPower(device, 'restart_vm')}
-                title="Restart Hyper-V VM"
-                className="rounded-lg border border-slate-700 bg-slate-800 p-2 text-slate-300 hover:border-slate-500"
-              >
-                <RotateCcw className="h-3.5 w-3.5" />
-              </button>
-            </div>
-          </div>
+          )}
         </div>
       </div>
     </div>

@@ -36,8 +36,8 @@ describe('Zero-D1 P2P Protocol & Gothwad Auth Helpers', () => {
     assert.equal(await verifyAuthProof('000000', nonce, 'pawan', 'host_os', browserProof), false);
 
     // Tampering targetMode from hyperv_vm -> host_os must fail
-    const vmProof = await computeAuthProof(pin, nonce, 'dost', 'hyperv_vm');
-    assert.equal(await verifyAuthProof(pin, nonce, 'dost', 'host_os', vmProof), false);
+    const vmProof = await computeAuthProof(pin, nonce, 'alex', 'hyperv_vm');
+    assert.equal(await verifyAuthProof(pin, nonce, 'alex', 'host_os', vmProof), false);
   });
 
   it('detects *.gothwadtech.com production hosts for direct Accounts SSO cookies', () => {

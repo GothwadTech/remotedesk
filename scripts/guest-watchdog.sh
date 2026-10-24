@@ -11,7 +11,7 @@ TIMESTAMP="$(date '+%Y-%m-%d %H:%M:%S')"
 
 # 1. Check if the host Wi-Fi currently has internet access
 if ! curl -fsS --max-time 8 https://clients3.google.com/generate_204 >/dev/null 2>&1; then
-  echo "[$TIMESTAMP] Internet abhi offline hai (Host Wi-Fi disconnected). Waiting for next cycle..."
+  echo "[$TIMESTAMP] Internet is currently offline (Host Wi-Fi disconnected). Waiting for next cycle..."
   exit 0
 fi
 
