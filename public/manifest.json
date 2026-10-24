@@ -1,0 +1,9 @@
+{
+  "name": "Gothwad Remote Desktop",
+  "short_name": "Remote Desktop",
+  "description": "Control your Windows Host OS and headless Hyper-V background VMs in any browser via Gothwad Accounts.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#020617",
+  "theme_color": "#4f46e5"
+}

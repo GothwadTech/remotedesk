@@ -1,0 +1,33 @@
+name: Deploy Cloudflare Pages (remotedesktop.gothwadtech.com)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+jobs:
+  deploy-pages:
+    runs-on: ubuntu-latest
+    # Runs if CLOUDFLARE_API_TOKEN is set; otherwise Cloudflare's native Git Pages integration deploys automatically.
+    if: ${{ secrets.CLOUDFLARE_API_TOKEN != '' }}
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies, test & build static bundle
+        run: |
+          npm ci
+          npm test
+          npm run build
+
+      - name: Deploy dist/ to Cloudflare Pages (Zero D1, Zero Worker!)
+        run: npx wrangler@latest pages deploy dist --project-name=remotedesktop --branch=main
