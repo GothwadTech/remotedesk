@@ -1,0 +1,65 @@
+name: Build Windows Agent EXE & Publish GitHub Release
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+    paths:
+      - 'agent/**'
+      - 'scripts/**'
+      - '.github/workflows/build-windows-agent.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  build-win64-agent:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install PyInstaller & WebRTC P2P dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller psutil websockets aiortc mss Pillow
+
+      - name: Compile standalone GothwadRemoteAgent-win64.exe
+        run: |
+          pyinstaller --onefile --collect-all av --collect-all aiortc --name GothwadRemoteAgent-win64 agent/gothwad_agent.py
+
+      - name: Bundle Setup Zip (Agent EXE + Hyper-V & Installer Scripts)
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path release-bundle | Out-Null
+          Copy-Item dist/GothwadRemoteAgent-win64.exe release-bundle/
+          Copy-Item scripts/host-setup-hyperv.ps1 release-bundle/
+          Copy-Item scripts/install-gothwad-agent.ps1 release-bundle/
+          Compress-Archive -Path release-bundle/* -DestinationPath dist/GothwadRemoteSetup-win64.zip -Force
+
+      - name: Upload Build Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: gothwad-remote-agent-win64
+          path: |
+            dist/GothwadRemoteAgent-win64.exe
+            dist/GothwadRemoteSetup-win64.zip
+
+      - name: Publish to GitHub Releases (on version tag v*)
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}"
+          gh release create $tag `
+            dist/GothwadRemoteAgent-win64.exe `
+            dist/GothwadRemoteSetup-win64.zip `
+            --title "Gothwad Remote Desktop Agent $tag" `
+            --generate-notes

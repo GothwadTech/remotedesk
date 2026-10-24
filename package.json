@@ -1,0 +1,33 @@
+{
+  "name": "gothwad-remotedesktop",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Gothwad Remote Desktop (remotedesktop.gothwadtech.com) — Zero-D1 Cloudflare Pages Portal with Gothwad Accounts SSO & WebRTC P2P",
+  "scripts": {
+    "dev": "vite --port=3000 --host=0.0.0.0",
+    "build": "vite build",
+    "preview": "vite preview --port=3000 --host=0.0.0.0",
+    "lint": "tsc --noEmit",
+    "check:sizes": "node tools/check-file-sizes.mjs",
+    "test:unit": "node --import tsx --test tests/*.test.ts",
+    "test": "npm run check:sizes && npm run lint && npm run test:unit"
+  },
+  "dependencies": {
+    "@tailwindcss/vite": "^4.1.4",
+    "@vitejs/plugin-react": "^4.3.4",
+    "lucide-react": "^0.487.0",
+    "peerjs": "^1.5.5",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "tailwindcss": "^4.1.4"
+  },
+  "devDependencies": {
+    "@types/node": "^22.14.0",
+    "@types/react": "^19.0.12",
+    "@types/react-dom": "^19.0.4",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.3",
+    "vite": "^6.3.2"
+  }
+}

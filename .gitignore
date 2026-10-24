@@ -1,0 +1,16 @@
+node_modules/
+dist/
+dev-dist/
+coverage/
+.wrangler/
+.dev.vars
+worker/.dev.vars
+.env
+.env.*
+!.env.example
+__pycache__/
+*.pyc
+build/
+*.exe
+*.zip
+.DS_Store
