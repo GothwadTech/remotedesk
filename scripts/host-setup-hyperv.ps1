@@ -51,15 +51,15 @@ if (-not $currentPrincipal.IsInRole([Security.Principal.WindowsBuiltInRole]::Adm
 # 2. Check if Hyper-V is enabled
 $hypervFeature = Get-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V
 if ($hypervFeature.State -ne "Enabled") {
-    Write-Host "[!] Hyper-V abhi enabled nahi hai. Enabling Microsoft-Hyper-V-All..." -ForegroundColor Yellow
+    Write-Host "[!] Hyper-V is not enabled yet. Enabling Microsoft-Hyper-V-All..." -ForegroundColor Yellow
     Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V -All
-    Write-Host "[+] Hyper-V enable ho gaya hai! Please laptop ek baar RESTART karein aur yeh script dobara run karein." -ForegroundColor Green
+    Write-Host "[+] Hyper-V has been enabled. Please restart this Windows PC once and run this script again." -ForegroundColor Green
     exit 0
 }
 
 # 3. Validate ISO file path
 if (-not (Test-Path -Path $IsoPath)) {
-    Write-Error "ISO file nahi mili: $IsoPath. Please sahi -IsoPath pass karein."
+    Write-Error "ISO file not found: $IsoPath. Please pass a valid -IsoPath."
     exit 1
 }
 
@@ -69,7 +69,7 @@ $vhdPath = Join-Path $vmPath "$VMName\$VMName.vhdx"
 New-Item -ItemType Directory -Force -Path $vmPath | Out-Null
 
 if (Get-VM -Name $VMName -ErrorAction SilentlyContinue) {
-    Write-Error "VM '$VMName' pehle se exist karta hai! Dusra -VMName dein ya purana VM check karein."
+    Write-Error "VM '$VMName' already exists. Specify a different -VMName or check the existing VM."
     exit 1
 }
 

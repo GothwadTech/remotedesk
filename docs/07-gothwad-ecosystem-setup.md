@@ -1,43 +1,36 @@
 # 07 — Zero-D1 Cloudflare Pages Deployment (`remotedesktop.gothwadtech.com`)
 
-Yeh guide explain karta hai ki **bina koi alag Cloudflare D1 database ya Worker banaye** (bilkul `GothwadTech/meet` ki tarah!) **`https://remotedesktop.gothwadtech.com`** sirf **60 seconds me Cloudflare Pages** par kaise live hoga!
+`GothwadTech/remotedesk` deploys as a pure static **Cloudflare Pages** application — no Cloudflare D1 database, no Worker backend, and no runtime secrets required.
 
 ---
 
-## 1. Hume Alag D1 Database Kyun Nahi Chahiye?
+## 1. Zero-D1 Architecture Summary
 
-Pehle traditional remote tools device list aur signaling ke liye SQL database use karte the, jisme `wrangler d1 create`, UUIDs, aur secrets maintain karne ka jhanjhat rehta tha. Is project me humne **Zero-D1 P2P Architecture** lagaya hai:
-
-| Kaam | Zero-D1 Solution (Koi Database Nahi!) |
+| Capability | Implementation |
 | :--- | :--- |
-| **Gothwad Login & Multi-Account (`u/0..5`)** | Browser seedha `https://api.gothwadtech.com/api/auth/me` (`credentials: 'include'`) call karta hai! `GothwadTech/accounts` pehle se har `*.gothwadtech.com` subdomain ko allow karta hai. |
-| **Auto-Finding Your Windows PCs** | Har PC aapke Gothwad username ke deterministic WebRTC slot (`grd-<username>-slot-1`..`6`) par listen karta hai. Login hote hi browser slots ko P2P probe karke Online PCs dikha deta hai! |
-| **PIN & Sharing Permissions (`vm_only` / `host_and_vm`)** | Aapka 6-digit PIN aur allowed `@gothwadtech.com` users seedha Windows Host ke `C:\ProgramData\GothwadRemote\agent-config.json` me rehte hain — aur `HMAC-SHA256(pin, nonce:viewer:mode)` challenge-response se verify hote hain (raw PIN kabhi network par nahi jaata!). |
-| **60 FPS Screen + Mouse/Keyboard Stream** | `PeerJS` + Google STUN + OpenRelay TURN (`GothwadTech/meet` wala proven CGNAT-bypass WebRTC stack) se seedha Browser &harr; Windows PC ke beech encrypted DTLS tunnel banta hai! |
+| **Gothwad SSO & Multi-Account (`u/0..5`)** | Direct browser calls to `https://api.gothwadtech.com/api/auth/me` (`credentials: 'include'`) plus the shared Universal Account Menu widget (`https://accounts.gothwadtech.com/widget/account-menu.js`). |
+| **Automatic Device Discovery** | Each paired Windows host listens on deterministic WebRTC slot `grd-<username>-slot-1..6`. On sign-in, the web app probes your slots over PeerJS and displays online computers immediately. |
+| **PIN & Access Control (`host_and_vm` / `vm_only`)** | Stored locally on the Windows host in `C:\ProgramData\GothwadRemote\agent-config.json` and verified with constant-time `HMAC-SHA256(pin, nonce:viewer:mode)`. |
+| **Screen & Input Transport** | End-to-end DTLS-encrypted WebRTC DataChannels (`PeerJS` + Google STUN + OpenRelay TURN over port 443). |
 
 ---
 
-## 2. Cloudflare Pages Deployment (Sirf 1 Minute — Zero CLI, Zero Secrets!)
+## 2. Deploy to Cloudflare Pages in 60 Seconds
 
-1. **Cloudflare Dashboard** kholein -> **Workers & Pages** -> **Create** -> **Pages** tab -> **Connect to Git**.
-2. Apni repo **`GothwadTech/remotedesktop`** select karein.
-3. Build settings bharein:
+1. Open **Cloudflare Dashboard -> Workers & Pages -> Create -> Pages -> Connect to Git**.
+2. Select repository **`GothwadTech/remotedesk`**.
+3. Configure build settings:
    - **Framework preset:** `Vite`
    - **Build command:** `npm run build`
    - **Build output directory:** `dist`
-4. **Save and Deploy** click karein!
-5. Deploy hone ke baad Pages project ke **Custom domains** tab me jaakar **`remotedesktop.gothwadtech.com`** add kar dein.
-
-**Bas khatam!** Koi `wrangler.toml`, koi D1 database, koi Worker route, ya koi secret key dalne ki zaroorat nahi hai!
-
-*(Optional: Agar kabhi future me non-`.gothwadtech.com` domain ya mobile app se OAuth consent screen chahiye ho, tabhi sirf `accounts` D1 ke `ecosystem_apps` me `gothwad-remotedesktop` add karna hota hai — web `remotedesktop.gothwadtech.com` ke liye uski bhi zaroorat nahi hai kyunki `.gothwadtech.com` cookie SSO direct kaam karta hai!)*
+4. Click **Save and Deploy**.
+5. Under **Custom domains**, attach **`remotedesktop.gothwadtech.com`**.
 
 ---
 
-## 3. GitHub Actions EXE Release (`GothwadTech/remotedesktop`)
+## 3. Build Standalone Windows `.exe` Release via GitHub Actions
 
-Dost ya apne Windows PC par Python install na karna pade, iske liye repo me [`.github/workflows/build-windows-agent.yml`](../.github/workflows/build-windows-agent.yml) laga hua hai:
+Repository workflow [`.github/workflows/build-windows-agent.yml`](../.github/workflows/build-windows-agent.yml) compiles `agent/gothwad_agent.py` into `GothwadRemoteAgent-win64.exe` on `windows-latest`:
 
-1. GitHub par **Actions -> Build Windows Agent EXE & Publish GitHub Release -> Run workflow** dabayein (ya `git tag v1.0.0 && git push origin v1.0.0` karein).
-2. GitHub ka `windows-latest` server apne-aap **`GothwadRemoteAgent-win64.exe`** aur **`GothwadRemoteSetup-win64.zip`** bana kar **Releases** me daal dega!
-3. Uske baad user bas **`https://remotedesktop.gothwadtech.com/setup`** kholega -> wahan diye gaye 1-line PowerShell command ko copy-paste karega -> Owner Consent (`YES`) aur **6-digit PIN** set karega -> PC turant dashboard par **Online** aa jayega!
+1. Open **GitHub -> Actions -> Build Windows Agent EXE & Publish GitHub Release -> Run workflow** (or push a version tag such as `v1.0.0`).
+2. Download `GothwadRemoteAgent-win64.exe` from Releases or run the one-line PowerShell installer inside the **Set up via PowerShell** tab on `https://remotedesktop.gothwadtech.com`.

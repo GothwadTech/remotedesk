@@ -17,9 +17,9 @@ import {
 
 const BOOKMARKS_KEY = 'gothwad_rd_peer_bookmarks_v1';
 
-// In-memory state for the preview Demo PC (zero D1!)
+// In-memory state for the preview Demo PC (zero D1)
 let demoVmState: VmPowerState = 'Running';
-let demoShares: Record<string, AccessScope> = { dost: 'vm_only' };
+let demoShares: Record<string, AccessScope> = { alex: 'vm_only' };
 
 export function listBookmarkedPeers(): string[] {
   try {
@@ -58,7 +58,7 @@ function makeDemoDeviceFor(viewerUsername: string): RemoteDevice | null {
       id: 'dev_demo_win11',
       peerId: 'grd-pawan-slot-1',
       slot: 1,
-      name: 'Dost-Win11Pro-Laptop (Preview Demo)',
+      name: 'Home-Win11-Laptop',
       ownerUsername: 'pawan',
       osInfo: 'Windows 11 Pro · 16GB RAM · 512GB SSD',
       vmName: 'RemoteWorkVM',
@@ -81,7 +81,7 @@ function makeDemoDeviceFor(viewerUsername: string): RemoteDevice | null {
     id: 'dev_demo_win11',
     peerId: 'grd-pawan-slot-1',
     slot: 1,
-    name: 'Dost-Win11Pro-Laptop (Preview Demo)',
+    name: 'Home-Win11-Laptop',
     ownerUsername: 'pawan',
     osInfo: 'Windows 11 Pro · 16GB RAM · 512GB SSD',
     vmName: 'RemoteWorkVM',

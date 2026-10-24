@@ -1,143 +1,132 @@
 import { useCallback, useEffect, useState } from 'react';
-import {
-  AlertTriangle,
-  ArrowRight,
-  Laptop,
-  LogIn,
-  Plus,
-  Server,
-  ShieldCheck,
-  Terminal,
-} from 'lucide-react';
+import { Download, Monitor, Plus, Share2, Terminal } from 'lucide-react';
 import type { ActiveConnection, RemoteDevice, SessionPayload, TargetMode } from './types';
 import { AuthRequiredError, resolveGothwadSession } from './lib/gothwadAuth';
-import { startGothwadOAuthPkce } from './lib/oauthPkce';
 import {
   connectP2PDevice,
   discoverDevicesForUser,
   removeBookmarkedPeer,
   triggerVmPowerOnHost,
 } from './lib/peerRegistry';
-import { Header, type NavTab } from './components/Header';
 import { DeviceCard } from './components/DeviceCard';
+import { Header } from './components/Header';
 import { PairDeviceModal } from './components/PairDeviceModal';
-import { ShareAccessModal } from './components/ShareAccessModal';
 import { PinPromptModal } from './components/PinPromptModal';
+import { RemoteSupportView } from './components/RemoteSupportView';
 import { RemoteViewer } from './components/RemoteViewer';
 import { SetupWizard } from './components/SetupWizard';
+import { ShareAccessModal } from './components/ShareAccessModal';
 
-function readInitialAuthuser(): number {
-  const pathMatch = window.location.pathname.match(/^\/u\/([0-5])(?:\b|\/)/);
-  if (pathMatch) return Number(pathMatch[1]);
-  const q = new URLSearchParams(window.location.search).get('authuser');
-  const n = Number(q);
-  return Number.isInteger(n) && n >= 0 && n <= 5 ? n : 0;
-}
+type NavTab = 'access' | 'support' | 'headless';
 
-function readInitialTab(): NavTab {
-  return window.location.pathname.endsWith('/setup') ? 'setup' : 'access';
+const THEME_STORAGE_KEY = 'gothwad_rd_theme';
+
+function getInitialTheme(): 'dark' | 'light' {
+  try {
+    const saved = localStorage.getItem(THEME_STORAGE_KEY);
+    if (saved === 'light' || saved === 'dark') return saved;
+  } catch {
+    // ignore storage errors
+  }
+  if (typeof window !== 'undefined' && window.matchMedia?.('(prefers-color-scheme: light)').matches) {
+    return 'light';
+  }
+  return 'dark';
 }
 
 export function App() {
-  const [authuser, setAuthuser] = useState<number>(readInitialAuthuser);
-  const [activeTab, setActiveTab] = useState<NavTab>(readInitialTab);
+  const [theme, setTheme] = useState<'dark' | 'light'>(getInitialTheme);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [activeTab, setActiveTab] = useState<NavTab>('access');
+
+  const [authuser, setAuthuser] = useState<number>(() => {
+    const u = new URLSearchParams(window.location.search).get('authuser');
+    return u ? Math.max(0, Math.min(5, Number(u) || 0)) : 0;
+  });
+
   const [session, setSession] = useState<SessionPayload | null>(null);
+  const [signinRedirectUrl, setSigninRedirectUrl] = useState<string | null>(null);
   const [devices, setDevices] = useState<RemoteDevice[]>([]);
   const [loading, setLoading] = useState(true);
-  const [unauthSigninUrl, setUnauthSigninUrl] = useState<string | null>(null);
-  const [serviceError, setServiceError] = useState<string | null>(null);
-
-  const [showPairModal, setShowPairModal] = useState(false);
-  const [shareDevice, setShareDevice] = useState<RemoteDevice | null>(null);
-  const [pinTarget, setPinTarget] = useState<{ device: RemoteDevice; mode: TargetMode } | null>(
-    null,
-  );
-  const [pinError, setPinError] = useState<string | null>(null);
-  const [connecting, setConnecting] = useState(false);
-  const [lastVerifiedPin, setLastVerifiedPin] = useState<string>('');
-  const [activeConnection, setActiveConnection] = useState<ActiveConnection | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [bannerError, setBannerError] = useState<string | null>(null);
   const [busyAction, setBusyAction] = useState<string | null>(null);
-  const [toast, setToast] = useState<string | null>(null);
 
-  const showToast = (msg: string) => {
-    setToast(msg);
-    setTimeout(() => setToast(null), 3500);
-  };
+  const [pairModalState, setPairModalState] = useState<{
+    open: boolean;
+    tab: 'setup' | 'shared';
+  }>({ open: false, tab: 'setup' });
+  const [shareDevice, setShareDevice] = useState<RemoteDevice | null>(null);
 
-  const handleChangeTab = (tab: NavTab) => {
-    setActiveTab(tab);
-    const url = new URL(window.location.href);
-    url.pathname = tab === 'setup' ? '/setup' : '/';
-    window.history.replaceState({}, '', url.toString());
-  };
+  const [pendingConnect, setPendingConnect] = useState<{
+    device: RemoteDevice;
+    mode: TargetMode;
+  } | null>(null);
+  const [connecting, setConnecting] = useState(false);
+  const [connectError, setConnectError] = useState<string | null>(null);
+  const [activeConnection, setActiveConnection] = useState<ActiveConnection | null>(null);
 
-  const loadAll = useCallback(async (slotIndex: number) => {
-    setLoading(true);
-    setServiceError(null);
-    setUnauthSigninUrl(null);
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', theme === 'dark');
+    try {
+      localStorage.setItem(THEME_STORAGE_KEY, theme);
+    } catch {
+      // ignore
+    }
+  }, [theme]);
+
+  const loadWorkspace = useCallback(async (slotIndex: number, quiet = false) => {
+    if (!quiet) setLoading(true);
+    else setRefreshing(true);
+    setBannerError(null);
+
     try {
       const sess = await resolveGothwadSession(slotIndex);
       setSession(sess);
+      setSigninRedirectUrl(null);
       const list = await discoverDevicesForUser(sess.user.username);
       setDevices(list);
     } catch (err) {
       if (err instanceof AuthRequiredError) {
         setSession(null);
-        setUnauthSigninUrl(err.signinUrl);
+        setSigninRedirectUrl(err.signinUrl);
       } else {
-        setServiceError(err instanceof Error ? err.message : 'Service temporarily unavailable');
+        setBannerError(err instanceof Error ? err.message : 'Unable to load computers');
       }
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   }, []);
 
   useEffect(() => {
-    void loadAll(authuser);
-  }, [authuser, loadAll]);
+    void loadWorkspace(authuser);
+  }, [authuser, loadWorkspace]);
 
   const handleSwitchAccount = (nextIndex: number) => {
     const url = new URL(window.location.href);
     url.searchParams.set('authuser', String(nextIndex));
     window.history.replaceState({}, '', url.toString());
-    setActiveConnection(null);
     setAuthuser(nextIndex);
   };
 
-  const handlePinSubmit = async (pin: string) => {
-    if (!pinTarget || !session) return;
+  const handleConfirmConnect = async (pin: string) => {
+    if (!pendingConnect || !session) return;
     setConnecting(true);
-    setPinError(null);
+    setConnectError(null);
     try {
       const conn = await connectP2PDevice(
-        pinTarget.device,
-        pinTarget.mode,
+        pendingConnect.device,
+        pendingConnect.mode,
         pin,
         session.user.username,
       );
-      setLastVerifiedPin(pin);
-      setPinTarget(null);
       setActiveConnection(conn);
+      setPendingConnect(null);
     } catch (err) {
-      setPinError(err instanceof Error ? err.message : 'Failed to connect');
+      setConnectError(err instanceof Error ? err.message : 'Failed to connect');
     } finally {
       setConnecting(false);
-    }
-  };
-
-  const handleHotSwitchMode = async (nextMode: TargetMode) => {
-    if (!activeConnection || !session || activeConnection.targetMode === nextMode) return;
-    try {
-      activeConnection.p2pHandle?.close();
-      const conn = await connectP2PDevice(
-        activeConnection.device,
-        nextMode,
-        lastVerifiedPin,
-        session.user.username,
-      );
-      setActiveConnection(conn);
-    } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Cannot switch target mode');
     }
   };
 
@@ -147,236 +136,284 @@ export function App() {
   ) => {
     setBusyAction(`${device.id}:${action}`);
     try {
-      const vmState = await triggerVmPowerOnHost(device, action);
-      showToast(`Sent '${action}' to Hyper-V (${device.vmName}) -> ${vmState}`);
-      await loadAll(authuser);
+      await triggerVmPowerOnHost(device, action);
+      await loadWorkspace(authuser, true);
     } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Power action failed');
+      setBannerError(err instanceof Error ? err.message : 'VM action failed');
     } finally {
       setBusyAction(null);
     }
   };
 
-  const handleUnlink = (device: RemoteDevice) => {
-    if (device.isDemo) {
-      showToast('Preview Demo PC resets automatically; real P2P slots unlink via Host CLI.');
-      return;
-    }
-    if (!window.confirm(`Remove '${device.name}' bookmark from this browser?`)) return;
+  const handleRemoveBookmark = (device: RemoteDevice) => {
     removeBookmarkedPeer(device.peerId);
-    void loadAll(authuser);
+    void loadWorkspace(authuser, true);
   };
 
+  if (activeConnection) {
+    return (
+      <RemoteViewer
+        connection={activeConnection}
+        onSwitchMode={(nextMode) => {
+          setActiveConnection({
+            ...activeConnection,
+            targetMode: nextMode,
+            hostNoticeActive: nextMode === 'host_os',
+          });
+        }}
+        onDisconnect={() => {
+          activeConnection.p2pHandle?.close();
+          setActiveConnection(null);
+        }}
+      />
+    );
+  }
+
+  const navItems: { id: NavTab; label: string; shortLabel: string; icon: typeof Monitor }[] = [
+    { id: 'access', label: 'Remote Access', shortLabel: 'Access', icon: Monitor },
+    { id: 'support', label: 'Remote Support', shortLabel: 'Support', icon: Share2 },
+    { id: 'headless', label: 'Set up via PowerShell', shortLabel: 'PowerShell', icon: Terminal },
+  ];
+
+  const ownedDevice = devices.find((d) => d.role === 'owner') || null;
+
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100">
+    <div className="flex min-h-screen flex-col bg-white text-neutral-900 dark:bg-[#212121] dark:text-neutral-100">
       <Header
         session={session}
         authuser={authuser}
-        activeTab={activeTab}
-        loading={loading}
-        onChangeTab={handleChangeTab}
-        onRefresh={() => void loadAll(authuser)}
-        onOpenPairModal={() => setShowPairModal(true)}
+        theme={theme}
+        refreshing={refreshing}
+        onToggleSidebar={() => setSidebarOpen((v) => !v)}
+        onToggleTheme={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
+        onRefresh={() => void loadWorkspace(authuser, true)}
         onSwitchAccount={handleSwitchAccount}
+        onReloadSession={() => void loadWorkspace(authuser, true)}
       />
 
-      <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
-        {unauthSigninUrl && (
-          <div className="mx-auto max-w-md rounded-2xl border border-slate-800 bg-slate-900/80 p-8 text-center shadow-2xl">
-            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-600/20 text-indigo-400">
-              <ShieldCheck className="h-6 w-6" />
+      {signinRedirectUrl ? (
+        <main className="mx-auto flex flex-1 items-center justify-center px-4 py-16">
+          <div className="w-full max-w-sm rounded-2xl border border-neutral-200 bg-white p-7 text-center dark:border-neutral-800 dark:bg-[#262626]">
+            <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-[#0494f4]/10 text-[#0494f4]">
+              <Monitor className="h-6 w-6" />
             </div>
-            <h2 className="mt-4 text-xl font-bold text-white">Sign in with Gothwad Account</h2>
-            <p className="mt-2 text-xs text-slate-400">
-              100% Zero-Database Cloudflare Pages Portal. Uses your{' '}
-              <strong>@gothwadtech.com</strong> SSO cookie + WebRTC P2P HMAC-SHA256 PIN verification.
+            <h1 className="text-lg font-medium text-neutral-900 dark:text-neutral-100">
+              Sign in to Remote Desktop
+            </h1>
+            <p className="mt-1.5 text-xs leading-relaxed text-neutral-500 dark:text-neutral-400">
+              Access your Windows computers securely from your phone or another PC with your Gothwad
+              Account.
             </p>
-            <div className="mt-6 space-y-2.5">
-              <a
-                href={unauthSigninUrl}
-                className="flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-indigo-500"
-              >
-                <LogIn className="h-4 w-4" />
-                Continue with Gothwad SSO (.gothwadtech.com)
-              </a>
-              <button
-                type="button"
-                onClick={() => void startGothwadOAuthPkce()}
-                className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-2 text-xs font-medium text-slate-300 hover:border-slate-600 hover:text-white"
-              >
-                Or Authorize via Gothwad OAuth 2.0 (PKCE S256)
-              </button>
-            </div>
-          </div>
-        )}
-
-        {serviceError && (
-          <div className="mx-auto max-w-lg rounded-2xl border border-amber-500/30 bg-amber-500/10 p-6 text-center">
-            <AlertTriangle className="mx-auto h-7 w-7 text-amber-400" />
-            <h3 className="mt-2 text-base font-bold text-white">Temporary Connection Issue</h3>
-            <p className="mt-1 text-xs text-amber-200">{serviceError}</p>
-            <button
-              type="button"
-              onClick={() => void loadAll(authuser)}
-              className="mt-4 rounded-lg bg-amber-500 px-4 py-2 text-xs font-semibold text-slate-950"
+            <a
+              href={signinRedirectUrl}
+              className="mt-5 inline-flex w-full items-center justify-center rounded-full bg-[#0494f4] px-5 py-2.5 text-sm font-medium text-white transition hover:bg-[#0382d6]"
             >
-              Retry
-            </button>
+              Sign in with Gothwad
+            </a>
           </div>
-        )}
+        </main>
+      ) : (
+        <div className="flex flex-1">
+          {/* Desktop Chrome Remote Desktop left navigation rail */}
+          <aside
+            className={`hidden shrink-0 border-r border-neutral-200 bg-white py-3 transition-all md:flex md:flex-col dark:border-neutral-800 dark:bg-[#212121] ${
+              sidebarOpen ? 'w-60 px-3' : 'w-16 items-center px-2'
+            }`}
+          >
+            <nav className="space-y-1">
+              {navItems.map((item) => {
+                const Icon = item.icon;
+                const active = activeTab === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => setActiveTab(item.id)}
+                    title={item.label}
+                    className={`flex w-full items-center gap-3 rounded-full px-3.5 py-2.5 text-left text-sm font-medium transition ${
+                      active
+                        ? 'bg-[#0494f4]/12 text-[#0494f4]'
+                        : 'text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-300 dark:hover:bg-neutral-800 dark:hover:text-white'
+                    } ${!sidebarOpen ? 'justify-center px-0 h-10 w-10' : ''}`}
+                  >
+                    <Icon className="h-4 w-4 shrink-0" />
+                    {sidebarOpen && <span className="truncate">{item.label}</span>}
+                  </button>
+                );
+              })}
+            </nav>
+          </aside>
 
-        {session && !serviceError && activeTab === 'setup' && (
-          <SetupWizard
-            username={session.user.username}
-            userEmail={session.user.email}
-            onFinishToDashboard={() => {
-              handleChangeTab('access');
-              void loadAll(authuser);
-            }}
-          />
-        )}
-
-        {session && !serviceError && activeTab === 'access' && (
-          <>
-            <div className="mb-6 grid grid-cols-1 gap-3 rounded-2xl border border-slate-800 bg-gradient-to-r from-slate-900 via-indigo-950/30 to-slate-900 p-4 sm:grid-cols-2">
-              <div className="flex items-start gap-3">
-                <Laptop className="mt-0.5 h-5 w-5 shrink-0 text-sky-400" />
-                <div>
-                  <div className="text-xs font-bold text-white">
-                    Option 1: Main Windows 11 OS Control
-                  </div>
-                  <p className="mt-0.5 text-[11px] text-slate-400">
-                    Chrome Remote Desktop jaisa full system access. Host screen par transparent
-                    sharing banner aur Stop button rehta hai.
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-start gap-3">
-                <Server className="mt-0.5 h-5 w-5 shrink-0 text-indigo-400" />
-                <div>
-                  <div className="text-xs font-bold text-white">
-                    Option 2: Headless Hyper-V Background VM
-                  </div>
-                  <p className="mt-0.5 text-[11px] text-slate-400">
-                    Dost apna laptop normal use karta rahe — aap background isolated VM me kaam
-                    karo, dost ki screen/mouse bilkul touch nahi hogi!
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {devices.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-slate-800 bg-slate-900/40 p-10 text-center">
-                <Laptop className="mx-auto h-10 w-10 text-slate-600" />
-                <h3 className="mt-3 text-base font-bold text-white">
-                  No Online Windows PCs Detected Yet
-                </h3>
-                <p className="mt-1 text-xs text-slate-400">
-                  Open the Windows Setup Wizard for step-by-step PowerShell commands to link your
-                  first PC via WebRTC P2P (Zero D1 Database!).
-                </p>
-                <button
-                  type="button"
-                  onClick={() => handleChangeTab('setup')}
-                  className="mt-4 inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-xs font-semibold text-white hover:bg-indigo-500"
-                >
-                  <Plus className="h-4 w-4" />
-                  Set Up Windows PC / Hyper-V VM
-                </button>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {devices.map((dev) => (
-                  <DeviceCard
-                    key={dev.id}
-                    device={dev}
-                    busyAction={busyAction}
-                    onConnect={(d, mode) => {
-                      setPinError(null);
-                      setPinTarget({ device: d, mode });
-                    }}
-                    onVmPower={handleVmPower}
-                    onOpenShares={(d) => setShareDevice(d)}
-                    onUnlink={handleUnlink}
-                  />
-                ))}
+          {/* Main content area */}
+          <main className="min-w-0 flex-1 px-4 pt-6 pb-24 sm:px-6 md:pb-12">
+            {bannerError && (
+              <div className="mx-auto mb-5 max-w-3xl rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300">
+                {bannerError}
               </div>
             )}
 
-            <div className="mt-6 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
-              <div className="flex items-start gap-3">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-600/20 text-indigo-400">
-                  <Terminal className="h-5 w-5" />
-                </div>
-                <div>
-                  <h3 className="text-sm font-bold text-white">
-                    Set up another Windows computer via PowerShell
-                  </h3>
-                  <p className="mt-0.5 text-xs text-slate-400">
-                    Step-by-step Hyper-V VM builder, Gothwad Account P2P pairing command, aur{' '}
-                    <code>.exe</code> installer seedha yahin se copy karein.
-                  </p>
-                </div>
+            {activeTab === 'access' && (
+              <div className="mx-auto max-w-3xl space-y-5">
+                {/* Card 1: Remote devices */}
+                <section className="overflow-hidden rounded-2xl border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-[#262626]">
+                  <div className="flex items-center justify-between border-b border-neutral-200 px-4 py-3.5 sm:px-5 dark:border-neutral-800">
+                    <h2 className="text-sm font-medium text-neutral-900 sm:text-base dark:text-neutral-100">
+                      Remote devices
+                    </h2>
+                    <button
+                      type="button"
+                      onClick={() => setPairModalState({ open: true, tab: 'shared' })}
+                      className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium text-[#0494f4] transition hover:bg-[#0494f4]/10"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      Add shared PC
+                    </button>
+                  </div>
+
+                  {loading ? (
+                    <div className="space-y-3 p-5">
+                      <div className="h-12 animate-pulse rounded-xl bg-neutral-100 dark:bg-neutral-800/70" />
+                    </div>
+                  ) : devices.length === 0 ? (
+                    <div className="px-5 py-10 text-center">
+                      <p className="text-sm font-medium text-neutral-700 dark:text-neutral-200">
+                        No remote computers are online
+                      </p>
+                      <p className="mx-auto mt-1 max-w-md text-xs text-neutral-500 dark:text-neutral-400">
+                        Turn on remote access on your Windows computer below, or add a computer
+                        shared with your Gothwad Account.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-neutral-200 dark:divide-neutral-800">
+                      {devices.map((dev) => (
+                        <DeviceCard
+                          key={dev.id}
+                          device={dev}
+                          busyAction={busyAction}
+                          onConnect={(device, mode) => {
+                            setConnectError(null);
+                            setPendingConnect({ device, mode });
+                          }}
+                          onVmPower={(device, act) => void handleVmPower(device, act)}
+                          onOpenShare={(device) => setShareDevice(device)}
+                          onRemoveBookmark={handleRemoveBookmark}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </section>
+
+                {/* Card 2: Set up remote access */}
+                <section className="overflow-hidden rounded-2xl border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-[#262626]">
+                  <div className="flex flex-col justify-between gap-4 p-4 sm:flex-row sm:items-center sm:p-5">
+                    <div className="flex items-start gap-3.5">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#0494f4]/10 text-[#0494f4]">
+                        <Download className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <h3 className="text-sm font-medium text-neutral-900 sm:text-[15px] dark:text-neutral-100">
+                          Set up remote access
+                        </h3>
+                        <p className="mt-0.5 text-xs leading-relaxed text-neutral-500 dark:text-neutral-400">
+                          Access your Windows 11 computer from your phone or another PC anytime.
+                        </p>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setPairModalState({ open: true, tab: 'setup' })}
+                      className="inline-flex shrink-0 items-center justify-center rounded-full border border-neutral-300 px-4 py-2 text-xs font-medium text-[#0494f4] transition hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-800"
+                    >
+                      Turn on
+                    </button>
+                  </div>
+                </section>
               </div>
-              <button
-                type="button"
-                onClick={() => handleChangeTab('setup')}
-                className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2 text-xs font-semibold text-white transition hover:bg-indigo-500"
-              >
-                Open Windows Setup &amp; Commands
-                <ArrowRight className="h-4 w-4" />
-              </button>
-            </div>
-          </>
-        )}
-      </main>
+            )}
 
-      {showPairModal && session && (
-        <PairDeviceModal
-          username={session.user.username}
-          onOpenFullGuide={() => {
-            setShowPairModal(false);
-            handleChangeTab('setup');
-          }}
-          onClose={() => {
-            setShowPairModal(false);
-            void loadAll(authuser);
-          }}
-        />
-      )}
+            {activeTab === 'support' && (
+              <RemoteSupportView
+                currentUsername={session?.user.username || 'user'}
+                ownedDevice={ownedDevice}
+                onOpenShareModal={(dev) => setShareDevice(dev)}
+                onOpenSetup={() => setActiveTab('headless')}
+                onConnectedBookmark={() => {
+                  setActiveTab('access');
+                  void loadWorkspace(authuser, true);
+                }}
+              />
+            )}
 
-      {shareDevice && (
-        <ShareAccessModal device={shareDevice} onClose={() => setShareDevice(null)} />
-      )}
+            {activeTab === 'headless' && (
+              <SetupWizard
+                currentUsername={session?.user.username || 'user'}
+                onFinish={() => {
+                  setActiveTab('access');
+                  void loadWorkspace(authuser, true);
+                }}
+              />
+            )}
+          </main>
 
-      {pinTarget && (
-        <PinPromptModal
-          device={pinTarget.device}
-          targetMode={pinTarget.mode}
-          error={pinError}
-          connecting={connecting}
-          onSubmit={handlePinSubmit}
-          onClose={() => setPinTarget(null)}
-        />
-      )}
-
-      {activeConnection && session && (
-        <RemoteViewer
-          connection={activeConnection}
-          viewerEmail={session.user.email}
-          onSwitchMode={handleHotSwitchMode}
-          onDisconnect={() => {
-            activeConnection.p2pHandle?.close();
-            setActiveConnection(null);
-          }}
-        />
-      )}
-
-      {toast && (
-        <div className="fixed bottom-5 right-5 z-50 rounded-xl border border-indigo-500/40 bg-slate-900 px-4 py-2.5 text-xs font-medium text-white shadow-2xl">
-          {toast}
+          {/* Mobile fixed bottom navigation bar */}
+          <nav
+            aria-label="Primary navigation"
+            className="fixed inset-x-0 bottom-0 z-30 flex h-16 items-center justify-around border-t border-neutral-200 bg-white px-2 md:hidden dark:border-neutral-800 dark:bg-[#212121]"
+          >
+            {navItems.map((item) => {
+              const Icon = item.icon;
+              const active = activeTab === item.id;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => setActiveTab(item.id)}
+                  className={`flex flex-1 flex-col items-center justify-center gap-1 py-1.5 text-[11px] font-medium transition ${
+                    active
+                      ? 'text-[#0494f4]'
+                      : 'text-neutral-500 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-100'
+                  }`}
+                >
+                  <span
+                    className={`flex h-7 w-12 items-center justify-center rounded-full transition ${
+                      active ? 'bg-[#0494f4]/15' : ''
+                    }`}
+                  >
+                    <Icon className="h-4 w-4" />
+                  </span>
+                  <span>{item.shortLabel}</span>
+                </button>
+              );
+            })}
+          </nav>
         </div>
       )}
+
+      <PairDeviceModal
+        open={pairModalState.open}
+        initialTab={pairModalState.tab}
+        currentUsername={session?.user.username || 'user'}
+        onClose={() => setPairModalState((s) => ({ ...s, open: false }))}
+        onOpenPowerShellSetup={() => setActiveTab('headless')}
+        onPaired={() => void loadWorkspace(authuser, true)}
+      />
+
+      <ShareAccessModal device={shareDevice} onClose={() => setShareDevice(null)} />
+
+      <PinPromptModal
+        key={pendingConnect ? `${pendingConnect.device.id}:${pendingConnect.mode}` : 'closed'}
+        device={pendingConnect?.device || null}
+        targetMode={pendingConnect?.mode || 'host_os'}
+        connecting={connecting}
+        error={connectError}
+        onChangeMode={(mode) =>
+          setPendingConnect((prev) => (prev ? { ...prev, mode } : null))
+        }
+        onClose={() => setPendingConnect(null)}
+        onConfirm={(pin) => void handleConfirmConnect(pin)}
+      />
     </div>
   );
 }
