@@ -28,9 +28,9 @@
 
 ---
 
-## 3. Build Standalone Windows `.exe` Release via GitHub Actions
+## 3. Automatic Standalone Windows GUI `.exe` Release via GitHub Actions
 
-Repository workflow [`.github/workflows/build-windows-agent.yml`](../.github/workflows/build-windows-agent.yml) compiles `agent/gothwad_agent.py` into `GothwadRemoteAgent-win64.exe` on `windows-latest`:
+Repository workflow [`.github/workflows/build-windows-agent.yml`](../.github/workflows/build-windows-agent.yml) automatically compiles the graphical installer **`GothwadRemoteHostSetup.exe`** (`--onefile --noconsole --uac-admin`) on `windows-latest` whenever `main` is updated and publishes it to **GitHub Releases**:
 
-1. Open **GitHub -> Actions -> Build Windows Agent EXE & Publish GitHub Release -> Run workflow** (or push a version tag such as `v1.0.0`).
-2. Download `GothwadRemoteAgent-win64.exe` from Releases or run the one-line PowerShell installer inside the **Set up via PowerShell** tab on `https://remotedesktop.gothwadtech.com`.
+1. Every push to `main` touching `agent/**` or `scripts/**` automatically builds and publishes `GothwadRemoteHostSetup.exe` to the Latest Release (`https://github.com/GothwadTech/remotedesk/releases/latest/download/GothwadRemoteHostSetup.exe`).
+2. Users simply click **Turn on** on `https://remotedesktop.gothwadtech.com`, open the downloaded `GothwadRemoteHostSetup.exe`, and finish setup in the GUI or directly from the browser.

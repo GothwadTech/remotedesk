@@ -51,6 +51,7 @@ export interface RemoteDevice {
 
 export interface P2PSessionHandle {
   sendInput: (packet: Record<string, unknown>) => void;
+  requestAdmin: (packet: Record<string, unknown>) => Promise<Record<string, unknown>>;
   onFrame: (cb: (jpegDataUrl: string) => void) => void;
   close: () => void;
 }
@@ -59,6 +60,7 @@ export interface ActiveConnection {
   targetMode: TargetMode;
   streamUrl: string | null;
   hostNoticeActive: boolean;
+  adminEnabled: boolean;
   device: RemoteDevice;
   p2pHandle: P2PSessionHandle | null;
 }

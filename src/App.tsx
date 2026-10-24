@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Download, Monitor, Plus, Share2, Terminal } from 'lucide-react';
+import { Monitor, Plus, Share2, Terminal } from 'lucide-react';
 import type { ActiveConnection, RemoteDevice, SessionPayload, TargetMode } from './types';
 import { AuthRequiredError, resolveGothwadSession } from './lib/gothwadAuth';
 import {
@@ -14,6 +14,7 @@ import { PairDeviceModal } from './components/PairDeviceModal';
 import { PinPromptModal } from './components/PinPromptModal';
 import { RemoteSupportView } from './components/RemoteSupportView';
 import { RemoteViewer } from './components/RemoteViewer';
+import { SetupRemoteCard } from './components/SetupRemoteCard';
 import { SetupWizard } from './components/SetupWizard';
 import { ShareAccessModal } from './components/ShareAccessModal';
 
@@ -304,32 +305,11 @@ export function App() {
                   )}
                 </section>
 
-                {/* Card 2: Set up remote access */}
-                <section className="overflow-hidden rounded-2xl border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-[#262626]">
-                  <div className="flex flex-col justify-between gap-4 p-4 sm:flex-row sm:items-center sm:p-5">
-                    <div className="flex items-start gap-3.5">
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#0494f4]/10 text-[#0494f4]">
-                        <Download className="h-5 w-5" />
-                      </div>
-                      <div>
-                        <h3 className="text-sm font-medium text-neutral-900 sm:text-[15px] dark:text-neutral-100">
-                          Set up remote access
-                        </h3>
-                        <p className="mt-0.5 text-xs leading-relaxed text-neutral-500 dark:text-neutral-400">
-                          Access your Windows 11 computer from your phone or another PC anytime.
-                        </p>
-                      </div>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() => setPairModalState({ open: true, tab: 'setup' })}
-                      className="inline-flex shrink-0 items-center justify-center rounded-full border border-neutral-300 px-4 py-2 text-xs font-medium text-[#0494f4] transition hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-800"
-                    >
-                      Turn on
-                    </button>
-                  </div>
-                </section>
+                {/* Card 2: Exact Chrome Remote Desktop inline setup card */}
+                <SetupRemoteCard
+                  currentUsername={session?.user.username || 'user'}
+                  onFinished={() => void loadWorkspace(authuser, true)}
+                />
               </div>
             )}
 

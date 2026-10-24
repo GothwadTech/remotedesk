@@ -2,6 +2,7 @@ import Peer, { type DataConnection } from 'peerjs';
 import type {
   AccessScope,
   ActiveConnection,
+  P2PSessionHandle,
   RemoteDevice,
   ShareEntry,
   TargetMode,
@@ -20,6 +21,86 @@ const BOOKMARKS_KEY = 'gothwad_rd_peer_bookmarks_v1';
 // In-memory state for the preview Demo PC (zero D1)
 let demoVmState: VmPowerState = 'Running';
 let demoShares: Record<string, AccessScope> = { alex: 'vm_only' };
+let demoFiles = [
+  { name: 'Desktop', path: 'C:\\Users\\Pawan\\Desktop', isDir: true, size: 0 },
+  { name: 'Downloads', path: 'C:\\Users\\Pawan\\Downloads', isDir: true, size: 0 },
+  { name: 'C: Drive', path: 'C:\\', isDir: true, size: 512 * 1024 * 1024 * 1024 },
+  { name: 'project-notes.txt', path: 'C:\\Users\\Pawan\\Desktop\\project-notes.txt', isDir: false, size: 128 },
+];
+let demoProcs = [
+  { pid: 4120, name: 'chrome.exe', ramMb: 842.4, cpu: 6.2 },
+  { pid: 7812, name: 'Code.exe', ramMb: 618.0, cpu: 3.1 },
+  { pid: 2290, name: 'explorer.exe', ramMb: 194.5, cpu: 0.8 },
+  { pid: 5510, name: 'GothwadRemoteHost.exe', ramMb: 64.2, cpu: 1.4 },
+];
+
+function createDemoSessionHandle(): P2PSessionHandle {
+  return {
+    sendInput: () => undefined,
+    onFrame: () => undefined,
+    close: () => undefined,
+    requestAdmin: async (pkt) => {
+      const op = String(pkt.op || '');
+      if (op === 'FS_LIST') {
+        return {
+          type: 'ADMIN_RES',
+          op: 'FS_LIST',
+          path: String(pkt.path || 'C:\\Users\\Pawan'),
+          parent: '__roots__',
+          entries: demoFiles,
+        };
+      }
+      if (op === 'FS_READ') {
+        return {
+          type: 'ADMIN_RES',
+          op: 'FS_READ',
+          name: 'project-notes.txt',
+          size: 46,
+          dataBase64: btoa('Gothwad Remote Desktop preview file download.\n'),
+        };
+      }
+      if (op === 'FS_WRITE') {
+        const name = String(pkt.name || 'uploaded.txt');
+        demoFiles = [
+          ...demoFiles,
+          { name, path: `C:\\Users\\Pawan\\Downloads\\${name}`, isDir: false, size: 1024 },
+        ];
+        return {
+          type: 'ADMIN_RES',
+          op: 'FS_WRITE',
+          path: `C:\\Users\\Pawan\\Downloads\\${name}`,
+        };
+      }
+      if (op === 'EXEC_CMD') {
+        const cmd = String(pkt.command || '');
+        return {
+          type: 'ADMIN_RES',
+          op: 'EXEC_CMD',
+          output: `PS C:\\Windows\\system32> ${cmd}\nComputerName : HOME-WIN11-LAPTOP\nUser         : NT AUTHORITY\\SYSTEM (Demo Preview)`,
+          exitCode: 0,
+        };
+      }
+      if (op === 'SYS_SNAPSHOT') {
+        return {
+          type: 'ADMIN_RES',
+          op: 'SYS_SNAPSHOT',
+          cpuPercent: 14.5,
+          ramUsedMb: 6180,
+          ramTotalMb: 16384,
+          batteryPercent: 86,
+          powerPlugged: true,
+          processes: demoProcs,
+        };
+      }
+      if (op === 'PROC_KILL') {
+        const pid = Number(pkt.pid || 0);
+        demoProcs = demoProcs.filter((p) => p.pid !== pid);
+        return { type: 'ADMIN_RES', op: 'PROC_KILL', pid, ok: true };
+      }
+      return { type: 'ADMIN_RES', op, error: 'Unsupported preview operation' };
+    },
+  };
+}
 
 export function listBookmarkedPeers(): string[] {
   try {
@@ -60,7 +141,7 @@ function makeDemoDeviceFor(viewerUsername: string): RemoteDevice | null {
       slot: 1,
       name: 'Home-Win11-Laptop',
       ownerUsername: 'pawan',
-      osInfo: 'Windows 11 Pro · 16GB RAM · 512GB SSD',
+      osInfo: 'Windows 11 Pro · 16 GB RAM · 512 GB SSD',
       vmName: 'RemoteWorkVM',
       vmState: demoVmState,
       hostRamTotalMb: 16384,
@@ -83,7 +164,7 @@ function makeDemoDeviceFor(viewerUsername: string): RemoteDevice | null {
     slot: 1,
     name: 'Home-Win11-Laptop',
     ownerUsername: 'pawan',
-    osInfo: 'Windows 11 Pro · 16GB RAM · 512GB SSD',
+    osInfo: 'Windows 11 Pro · 16 GB RAM · 512 GB SSD',
     vmName: 'RemoteWorkVM',
     vmState: demoVmState,
     hostRamTotalMb: 16384,
@@ -154,7 +235,7 @@ function probeSinglePeer(
             vmName: String(d.vmName || 'RemoteWorkVM'),
             vmState: (['Running', 'Saved', 'Paused', 'Off'].includes(String(d.vmState))
               ? d.vmState
-              : 'Running') as VmPowerState,
+              : 'Off') as VmPowerState,
             hostRamTotalMb: Number(d.hostRamTotalMb) || 16384,
             hostRamUsedMb: Number(d.hostRamUsedMb) || 6144,
             hostCpuPercent: Number(d.hostCpuPercent) || 10,
@@ -246,7 +327,7 @@ export async function connectP2PDevice(
   viewerUsername: string,
 ): Promise<ActiveConnection> {
   if (targetMode === 'host_os' && !device.canControlHostOs) {
-    throw new Error('Your Gothwad Account only has VM-Only access on this PC.');
+    throw new Error('Your Gothwad Account only has Background VM access on this PC.');
   }
 
   if (device.isDemo) {
@@ -257,14 +338,17 @@ export async function connectP2PDevice(
       targetMode,
       streamUrl: null,
       hostNoticeActive: targetMode === 'host_os',
+      adminEnabled: device.canControlHostOs,
       device,
-      p2pHandle: null,
+      p2pHandle: createDemoSessionHandle(),
     };
   }
 
   return new Promise((resolve, reject) => {
     const peer = new Peer({ config: { iceServers: DEFAULT_ICE_SERVERS } });
     let frameListener: ((jpegUrl: string) => void) | null = null;
+    const pendingAdmin = new Map<string, (res: Record<string, unknown>) => void>();
+    let reqCounter = 0;
     let settled = false;
 
     const fail = (msg: string) => {
@@ -299,11 +383,29 @@ export async function connectP2PDevice(
             targetMode,
             streamUrl: typeof msg.streamUrl === 'string' ? msg.streamUrl : device.streamUrl || null,
             hostNoticeActive: targetMode === 'host_os',
+            adminEnabled: Boolean(msg.adminEnabled ?? device.canControlHostOs),
             device,
             p2pHandle: {
               sendInput: (pkt) => {
                 if (conn.open) conn.send(pkt);
               },
+              requestAdmin: (pkt) =>
+                new Promise((resAdmin, rejAdmin) => {
+                  if (!conn.open) {
+                    rejAdmin(new Error('Connection closed'));
+                    return;
+                  }
+                  const reqId = `r_${++reqCounter}`;
+                  const t = setTimeout(() => {
+                    pendingAdmin.delete(reqId);
+                    rejAdmin(new Error('Host response timed out'));
+                  }, 28000);
+                  pendingAdmin.set(reqId, (payload) => {
+                    clearTimeout(t);
+                    resAdmin(payload);
+                  });
+                  conn.send({ ...pkt, type: 'ADMIN_REQ', reqId });
+                }),
               onFrame: (cb) => {
                 frameListener = cb;
               },
@@ -315,6 +417,12 @@ export async function connectP2PDevice(
           });
         } else if (msg?.type === 'FRAME' && typeof msg.jpegBase64 === 'string') {
           frameListener?.(`data:image/jpeg;base64,${msg.jpegBase64}`);
+        } else if (msg?.type === 'ADMIN_RES' && typeof msg.reqId === 'string') {
+          const resolver = pendingAdmin.get(msg.reqId);
+          if (resolver) {
+            pendingAdmin.delete(msg.reqId);
+            resolver(msg);
+          }
         }
       });
 
@@ -340,7 +448,6 @@ export async function triggerVmPowerOnHost(
     demoVmState = nextState;
     return nextState;
   }
-  // Live P2P power command (authenticated on active or quick channel)
   return nextState;
 }
 

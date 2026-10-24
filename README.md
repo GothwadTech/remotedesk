@@ -12,9 +12,12 @@ Modeled on Google Chrome Remote Desktop (`remotedesktop.google.com`), `GothwadTe
   - Clean three-section layout: **Remote Access**, **Remote Support**, and **Set up via PowerShell** (desktop left navigation rail + mobile bottom navigation bar).
   - Exact ecosystem theme palette: **`#212121`** in Dark mode and **`#ffffff`** in Light mode with instant theme switching.
   - **Universal Gothwad Account Menu** (`https://accounts.gothwadtech.com/widget/account-menu.js`) with multi-account (`u/0..5`) switching and `+n` avatar badge.
-- **Mobile-Ready Full-Screen Viewer:**
+- **Chrome Remote Desktop Installation Flow + Native GUI `.exe`:**
+  - Click **Turn on** inside `remotedesktop.gothwadtech.com` -> downloads **`GothwadRemoteHostSetup.exe`** -> choose Computer Name & 6-digit PIN -> launches `gothwad-remote://setup` directly into the Windows app.
+  - Or simply double-click **`GothwadRemoteHostSetup.exe`** on Windows (like an Android APK) to configure your Gothwad Account and 6-digit PIN inside the `#212121` native graphical installer with zero PowerShell commands.
+- **Mobile-Ready Full-Screen Viewer + Administrator Tools:**
   - Collapsible floating top toolbar handle so 100% of your phone screen stays unobstructed.
-  - Dedicated mobile **Keyboard** button (triggers Android/iOS virtual keyboard) and **Direct Touch / Trackpad** cursor toggle.
+  - Dedicated mobile **Keyboard** button, **Direct Touch / Trackpad** cursor toggle, and a slide-over **Tools** drawer with **File Transfer (Upload/Download)**, **Administrator PowerShell**, and **Live Task Manager**.
 - **Main Desktop First, Background VM Optional:**
   - Primary click connects straight to your Windows 11 Main Desktop (with a visible Chrome Remote Desktop-style `"Your desktop is shared [Stop Sharing]"` banner on the host).
   - Optional secondary **Hyper-V Background VM** (`Max 4 GB RAM`, `60% CPU`, Wi-Fi `Default Switch` NAT) accessible from the device overflow menu or viewer toggle.
