@@ -1,12 +1,11 @@
 <#
 .SYNOPSIS
-    One-Time Transparent Installer for Gothwad Remote Desktop Agent (Zero-D1 WebRTC P2P).
+    PowerShell Installer for Gothwad Remote Desktop Host (Zero-D1 WebRTC P2P).
 
 .DESCRIPTION
     - Requires explicit confirmation from the PC owner.
-    - Downloads GothwadRemoteAgent-win64.exe from GothwadTech/remotedesk GitHub Releases.
-    - Links this PC (Main Windows OS + Hyper-V VM) to your @gothwadtech.com P2P slot.
-    - Registers a transparent startup task ('GothwadRemoteAgent') so it reconnects on boot.
+    - Downloads GothwadRemoteHostSetup.exe from GothwadTech/remotedesk GitHub Releases.
+    - Configures and starts the background Windows Host service.
 #>
 
 param(
@@ -23,13 +22,13 @@ param(
     [string]$VMName = "RemoteWorkVM",
 
     [Parameter(Mandatory = $false)]
-    [string]$ReleaseExeUrl = "https://github.com/GothwadTech/remotedesk/releases/latest/download/GothwadRemoteAgent-win64.exe"
+    [string]$ReleaseExeUrl = "https://github.com/GothwadTech/remotedesk/releases/latest/download/GothwadRemoteHostSetup.exe"
 )
 
 $ErrorActionPreference = "Stop"
 
 Write-Host "================================================================" -ForegroundColor Cyan
-Write-Host "  Gothwad Remote Desktop — Zero-D1 WebRTC P2P Setup             " -ForegroundColor Cyan
+Write-Host "  Gothwad Remote Desktop Host — Windows Setup                   " -ForegroundColor Cyan
 Write-Host "  Portal: https://remotedesktop.gothwadtech.com                 " -ForegroundColor Cyan
 Write-Host "================================================================" -ForegroundColor Cyan
 Write-Host "IMPORTANT: Run ONLY with the explicit permission of this PC's owner." -ForegroundColor Yellow
@@ -48,27 +47,13 @@ if ($pinPlain -notmatch '^\d{6,12}$') {
 
 $installDir = "C:\Program Files\GothwadRemote"
 New-Item -ItemType Directory -Force -Path $installDir | Out-Null
-$exePath = Join-Path $installDir "GothwadRemoteAgent.exe"
+$exePath = Join-Path $installDir "GothwadRemoteHost.exe"
 
-Write-Host "[1/3] Downloading GothwadRemoteAgent from GitHub Releases..." -ForegroundColor Green
+Write-Host "[1/2] Downloading GothwadRemoteHostSetup.exe from GitHub Releases..." -ForegroundColor Green
 Invoke-WebRequest -Uri $ReleaseExeUrl -OutFile $exePath
 
-Write-Host "[2/3] Configuring Zero-D1 P2P Slot $Slot for '$GothwadUser@gothwadtech.com'..." -ForegroundColor Green
+Write-Host "[2/2] Configuring Slot $Slot and starting background host service..." -ForegroundColor Green
 & $exePath --pair --gothwad-user $GothwadUser --slot $Slot --device-name $DeviceName --vm-name $VMName --pin $pinPlain --confirm-owner-consent
 
-Write-Host "[3/3] Registering startup Scheduled Task 'GothwadRemoteAgent'..." -ForegroundColor Green
-$action = New-ScheduledTaskAction -Execute $exePath -Argument "--run"
-$trigger = New-ScheduledTaskTrigger -AtStartup
-$settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -RestartCount 5 -RestartInterval (New-TimeSpan -Minutes 2)
-
-Register-ScheduledTask -TaskName "GothwadRemoteAgent" `
-    -Description "Gothwad Remote Desktop & Hyper-V P2P Agent (https://remotedesktop.gothwadtech.com)" `
-    -Action $action `
-    -Trigger $trigger `
-    -Settings $settings `
-    -RunLevel Highest `
-    -Force | Out-Null
-
-Start-ScheduledTask -TaskName "GothwadRemoteAgent"
 Write-Host ""
-Write-Host "Done! Open https://remotedesktop.gothwadtech.com in your browser to control Main OS or Hyper-V VM '$VMName'." -ForegroundColor Cyan
+Write-Host "Done! Open https://remotedesktop.gothwadtech.com on your phone or browser to connect." -ForegroundColor Cyan

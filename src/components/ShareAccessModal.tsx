@@ -23,7 +23,7 @@ export function ShareAccessModal({ device, onClose }: ShareAccessModalProps) {
   if (!device) return null;
 
   const cleanTarget = sanitizeGothwadUsername(username) || 'friend';
-  const shareCmd = `& "C:\\Program Files\\GothwadRemote\\GothwadRemoteAgent.exe" --grant-user "${cleanTarget}" --scope "${scope}"`;
+  const shareCmd = `& "C:\\Program Files\\GothwadRemote\\GothwadRemoteHost.exe" --grant-user "${cleanTarget}" --scope "${scope}"`;
 
   const handleGrantDemo = (e: React.FormEvent) => {
     e.preventDefault();

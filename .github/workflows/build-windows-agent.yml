@@ -1,8 +1,10 @@
-name: Build Windows Agent EXE & Publish GitHub Release
+name: Build Windows Host Installer EXE & Publish GitHub Release
 
 on:
   workflow_dispatch:
   push:
+    branches:
+      - main
     tags:
       - 'v*'
     paths:
@@ -14,7 +16,7 @@ permissions:
   contents: write
 
 jobs:
-  build-win64-agent:
+  build-win64-host:
     runs-on: windows-latest
     steps:
       - name: Checkout repository
@@ -30,15 +32,16 @@ jobs:
           python -m pip install --upgrade pip
           pip install pyinstaller psutil websockets aiortc mss Pillow
 
-      - name: Compile standalone GothwadRemoteAgent-win64.exe
+      - name: Compile GUI Installer EXE (--noconsole --uac-admin)
         run: |
-          pyinstaller --onefile --collect-all av --collect-all aiortc --name GothwadRemoteAgent-win64 agent/gothwad_agent.py
+          pyinstaller --onefile --noconsole --uac-admin --paths agent --collect-all av --collect-all aiortc --name GothwadRemoteHostSetup agent/gothwad_agent.py
 
-      - name: Bundle Setup Zip (Agent EXE + Hyper-V & Installer Scripts)
+      - name: Prepare Release Assets (GUI Setup EXE + Zip Bundle)
         shell: pwsh
         run: |
+          Copy-Item dist/GothwadRemoteHostSetup.exe dist/GothwadRemoteAgent-win64.exe -Force
           New-Item -ItemType Directory -Force -Path release-bundle | Out-Null
-          Copy-Item dist/GothwadRemoteAgent-win64.exe release-bundle/
+          Copy-Item dist/GothwadRemoteHostSetup.exe release-bundle/
           Copy-Item scripts/host-setup-hyperv.ps1 release-bundle/
           Copy-Item scripts/install-gothwad-agent.ps1 release-bundle/
           Compress-Archive -Path release-bundle/* -DestinationPath dist/GothwadRemoteSetup-win64.zip -Force
@@ -46,20 +49,32 @@ jobs:
       - name: Upload Build Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: gothwad-remote-agent-win64
+          name: gothwad-remote-host-win64
           path: |
+            dist/GothwadRemoteHostSetup.exe
             dist/GothwadRemoteAgent-win64.exe
             dist/GothwadRemoteSetup-win64.zip
 
-      - name: Publish to GitHub Releases (on version tag v*)
-        if: startsWith(github.ref, 'refs/tags/v')
+      - name: Publish or Update Latest GitHub Release
+        if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: pwsh
         run: |
-          $tag = "${{ github.ref_name }}"
-          gh release create $tag `
-            dist/GothwadRemoteAgent-win64.exe `
-            dist/GothwadRemoteSetup-win64.zip `
-            --title "Gothwad Remote Desktop Agent $tag" `
-            --generate-notes
+          $tag = if ("${{ github.ref }}".StartsWith("refs/tags/v")) { "${{ github.ref_name }}" } else { "v1.0.0" }
+          $exists = gh release view $tag 2>$null
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload $tag `
+              dist/GothwadRemoteHostSetup.exe `
+              dist/GothwadRemoteAgent-win64.exe `
+              dist/GothwadRemoteSetup-win64.zip `
+              --clobber
+          } else {
+            gh release create $tag `
+              dist/GothwadRemoteHostSetup.exe `
+              dist/GothwadRemoteAgent-win64.exe `
+              dist/GothwadRemoteSetup-win64.zip `
+              --title "Gothwad Remote Desktop Host ($tag)" `
+              --notes "Standalone Windows 11 GUI Installer & Background Host Service (GothwadRemoteHostSetup.exe). Download and double-click on Windows to enable remote access." `
+              --latest
+          }

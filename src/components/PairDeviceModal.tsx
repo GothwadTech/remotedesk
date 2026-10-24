@@ -13,7 +13,7 @@ interface PairDeviceModalProps {
 }
 
 const RELEASE_EXE_URL =
-  'https://github.com/GothwadTech/remotedesk/releases/latest/download/GothwadRemoteAgent-win64.exe';
+  'https://github.com/GothwadTech/remotedesk/releases/latest/download/GothwadRemoteHostSetup.exe';
 
 export function PairDeviceModal({
   open,

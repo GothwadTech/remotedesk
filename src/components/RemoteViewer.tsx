@@ -4,6 +4,7 @@ import {
   ChevronUp,
   Clipboard,
   Command,
+  FolderOpen,
   Hand,
   HardDrive,
   Keyboard,
@@ -14,6 +15,7 @@ import {
   X,
 } from 'lucide-react';
 import type { ActiveConnection, TargetMode } from '../types';
+import { RemoteAdminDrawer } from './RemoteAdminDrawer';
 
 interface RemoteViewerProps {
   connection: ActiveConnection;
@@ -27,6 +29,7 @@ export function RemoteViewer({ connection, onSwitchMode, onDisconnect }: RemoteV
   const mobileInputRef = useRef<HTMLInputElement>(null);
 
   const [barOpen, setBarOpen] = useState(true);
+  const [adminOpen, setAdminOpen] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [touchMode, setTouchMode] = useState<'touch' | 'trackpad'>('touch');
   const [cursor, setCursor] = useState({ x: 50, y: 50 });
@@ -61,7 +64,12 @@ export function RemoteViewer({ connection, onSwitchMode, onDisconnect }: RemoteV
     }
   };
 
-  const sendPointer = (type: 'move' | 'click', xPct: number, yPct: number) => {
+  const sendPointer = (
+    type: 'move' | 'click' | 'right_click' | 'double_click' | 'wheel',
+    xPct: number,
+    yPct: number,
+    deltaY?: number,
+  ) => {
     const clampedX = Math.max(0, Math.min(100, xPct));
     const clampedY = Math.max(0, Math.min(100, yPct));
     setCursor({ x: clampedX, y: clampedY });
@@ -70,7 +78,16 @@ export function RemoteViewer({ connection, onSwitchMode, onDisconnect }: RemoteV
       action: type,
       x: Number((clampedX / 100).toFixed(4)),
       y: Number((clampedY / 100).toFixed(4)),
+      deltaY,
     });
+  };
+
+  const coordsFromMouse = (e: React.MouseEvent<HTMLDivElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    return {
+      xPct: ((e.clientX - rect.left) / rect.width) * 100,
+      yPct: ((e.clientY - rect.top) / rect.height) * 100,
+    };
   };
 
   const handleStageClick = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -78,10 +95,23 @@ export function RemoteViewer({ connection, onSwitchMode, onDisconnect }: RemoteV
       sendPointer('click', cursor.x, cursor.y);
       return;
     }
-    const rect = e.currentTarget.getBoundingClientRect();
-    const xPct = ((e.clientX - rect.left) / rect.width) * 100;
-    const yPct = ((e.clientY - rect.top) / rect.height) * 100;
+    const { xPct, yPct } = coordsFromMouse(e);
     sendPointer('click', xPct, yPct);
+  };
+
+  const handleStageContextMenu = (e: React.MouseEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    const { xPct, yPct } = coordsFromMouse(e);
+    sendPointer('right_click', xPct, yPct);
+  };
+
+  const handleStageDoubleClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    const { xPct, yPct } = coordsFromMouse(e);
+    sendPointer('double_click', xPct, yPct);
+  };
+
+  const handleStageWheel = (e: React.WheelEvent<HTMLDivElement>) => {
+    sendPointer('wheel', cursor.x, cursor.y, e.deltaY > 0 ? -120 : 120);
   };
 
   const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
@@ -101,7 +131,7 @@ export function RemoteViewer({ connection, onSwitchMode, onDisconnect }: RemoteV
 
   const handleSendCtrlAltDel = () => {
     connection.p2pHandle?.sendInput({ type: 'KEY_COMBO', keys: ['Control', 'Alt', 'Delete'] });
-    flashToast('Sent Ctrl + Alt + Del');
+    flashToast('Sent Task Manager shortcut');
   };
 
   const handleSyncClipboard = async () => {
@@ -137,7 +167,7 @@ export function RemoteViewer({ connection, onSwitchMode, onDisconnect }: RemoteV
       ref={containerRef}
       tabIndex={0}
       onKeyDown={(e) => {
-        if (document.activeElement === mobileInputRef.current) return;
+        if (adminOpen || document.activeElement === mobileInputRef.current) return;
         connection.p2pHandle?.sendInput({ type: 'KEY', key: e.key });
       }}
       className="fixed inset-0 z-50 flex flex-col bg-black text-white select-none focus:outline-hidden"
@@ -177,7 +207,7 @@ export function RemoteViewer({ connection, onSwitchMode, onDisconnect }: RemoteV
           <div className="pointer-events-auto flex max-w-full flex-wrap items-center justify-center gap-1 rounded-2xl border border-neutral-700/90 bg-[#212121]/95 px-2.5 py-1.5 shadow-2xl backdrop-blur-md sm:gap-1.5 sm:px-3">
             <div className="flex items-center gap-2 pr-1.5 text-xs">
               <span className="h-2 w-2 rounded-full bg-emerald-400" />
-              <span className="max-w-[120px] truncate font-medium text-neutral-100 sm:max-w-[180px]">
+              <span className="max-w-[110px] truncate font-medium text-neutral-100 sm:max-w-[170px]">
                 {connection.device.name}
               </span>
               <span className="hidden rounded-md bg-neutral-800 px-1.5 py-0.5 text-[10px] text-neutral-300 sm:inline">
@@ -213,6 +243,22 @@ export function RemoteViewer({ connection, onSwitchMode, onDisconnect }: RemoteV
               </span>
             </button>
 
+            {connection.adminEnabled && (
+              <button
+                type="button"
+                onClick={() => setAdminOpen((v) => !v)}
+                title="Files, PowerShell & Task Manager"
+                className={`inline-flex h-8 items-center gap-1 rounded-lg px-2 text-xs transition ${
+                  adminOpen
+                    ? 'bg-[#0494f4] text-white'
+                    : 'text-neutral-200 hover:bg-neutral-800'
+                }`}
+              >
+                <FolderOpen className="h-4 w-4" />
+                <span className="hidden sm:inline">Tools</span>
+              </button>
+            )}
+
             {canSwitch && (
               <button
                 type="button"
@@ -221,18 +267,17 @@ export function RemoteViewer({ connection, onSwitchMode, onDisconnect }: RemoteV
                 className="inline-flex h-8 items-center gap-1 rounded-lg px-2 text-xs text-neutral-200 transition hover:bg-neutral-800"
               >
                 {isHostOs ? <HardDrive className="h-4 w-4" /> : <Monitor className="h-4 w-4" />}
-                <span className="hidden sm:inline">{isHostOs ? 'VM' : 'Desktop'}</span>
+                <span className="hidden md:inline">{isHostOs ? 'VM' : 'Desktop'}</span>
               </button>
             )}
 
             <button
               type="button"
               onClick={handleSendCtrlAltDel}
-              title="Send Ctrl+Alt+Del"
+              title="Open remote Task Manager"
               className="inline-flex h-8 items-center gap-1 rounded-lg px-2 text-xs text-neutral-200 transition hover:bg-neutral-800"
             >
               <Command className="h-4 w-4" />
-              <span className="hidden lg:inline">Ctrl+Alt+Del</span>
             </button>
 
             <button
@@ -285,6 +330,9 @@ export function RemoteViewer({ connection, onSwitchMode, onDisconnect }: RemoteV
       <div
         ref={stageRef}
         onClick={handleStageClick}
+        onContextMenu={handleStageContextMenu}
+        onDoubleClick={handleStageDoubleClick}
+        onWheel={handleStageWheel}
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         className="relative flex flex-1 items-center justify-center overflow-hidden bg-black"
@@ -324,9 +372,8 @@ export function RemoteViewer({ connection, onSwitchMode, onDisconnect }: RemoteV
                 {isHostOs ? 'Windows 11 Main Desktop (Preview)' : 'Isolated Background VM (Preview)'}
               </p>
               <p className="mt-1 text-xs text-neutral-300">
-                {touchMode === 'touch'
-                  ? 'Tap or click anywhere to move cursor. Use the Keyboard icon on mobile.'
-                  : 'Drag anywhere like a laptop trackpad to move cursor, tap to click.'}
+                Tap anywhere to click, or open Tools in the top bar for Files, PowerShell &amp;
+                Tasks.
               </p>
               {typedPreview && (
                 <div className="mt-3 rounded-lg bg-black/60 px-3 py-1.5 font-mono text-xs text-emerald-300">
@@ -342,7 +389,6 @@ export function RemoteViewer({ connection, onSwitchMode, onDisconnect }: RemoteV
               </span>
             </div>
 
-            {/* Simulated remote pointer */}
             <div
               style={{ left: `${cursor.x}%`, top: `${cursor.y}%` }}
               className="pointer-events-none absolute -translate-x-1 -translate-y-1 transition-all duration-75"
@@ -352,6 +398,12 @@ export function RemoteViewer({ connection, onSwitchMode, onDisconnect }: RemoteV
           </div>
         )}
       </div>
+
+      <RemoteAdminDrawer
+        open={adminOpen}
+        p2pHandle={connection.p2pHandle}
+        onClose={() => setAdminOpen(false)}
+      />
     </div>
   );
 }
